@@ -6,173 +6,23 @@
     <title>Aprovação de Documentos</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="../assets/layout.css" rel="stylesheet">
     <style>
-        :root {
-            --primary-color: #000080;
-            --secondary-color: #d92323;
-            --bg-light: #f8f9fa;
-        }
-        body {
-            background-color: var(--bg-light);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-
-        /* TELA DE LOGIN */
-        #login-screen {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            background-color: #f0f2f5;
-        }
-
-        /* ESTRUTURA DO TOPO */
-        .header-container {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 15px;
-            margin-bottom: 24px;
-            background: white;
-            padding: 15px 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-        }
-        .logo-box {
-            display: flex;
-            align-items: center;
-            flex-shrink: 0;
-            height: 50px;
-            width: 130px;
-            justify-content: center;
-        }
-        .logo-box img {
-            max-height: 100%;
-            max-width: 100%;
-            display: block;
-            object-fit: contain;
-        }
-        .header {
-            flex-grow: 1;
-            text-align: center;
-        }
-
-        /* TÍTULO DINÂMICO GRANDE E AZUL NO TOPO */
-        .header h1 {
-            font-size: 26px;
-            font-weight: 800;
-            text-transform: uppercase;
-            color: var(--primary-color);
-            letter-spacing: 0.3px;
-            margin: 0;
-            line-height: 1.2;
-        }
-
-        .header-right-panel {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            flex-shrink: 0;
-        }
-        .iso-info-card {
-            background: #fdfdfd;
-            padding: 10px 16px;
-            border-radius: 8px;
-            border: 1px dashed var(--primary-color);
-            display: flex;
-            gap: 16px;
-            justify-content: center;
-            align-items: center;
-        }
-        .iso-field-group {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-        }
-        .iso-field-group span {
-            font-size: 10px;
-            font-weight: 700;
-            color: #555;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-        }
-        .iso-editable {
-            border: none;
-            background: transparent;
-            font-size: 12px;
-            color: var(--primary-color);
-            font-weight: 700;
-            border-bottom: 1px solid #ccc;
-            padding: 2px;
-            width: 85px;
-            text-align: center;
-        }
-        .iso-editable:focus {
-            outline: none;
-            border-bottom: 2px solid var(--primary-color);
-            background: #f1f3f9;
-        }
-        .session-card {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            min-width: 90px;
-            flex-shrink: 0;
-            border-left: 1px solid #ddd;
-            padding-left: 15px;
-            align-items: center;
-        }
-        .usuario-badge {
-            background: var(--primary-color);
-            color: white;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 700;
-            text-transform: uppercase;
-            text-align: center;
-        }
+        /* Estilos específicos deste módulo. O resto (sidebar, topbar, cards,
+           botões, seções) vem de assets/layout.css. */
 
         .nav-tabs .nav-link {
             color: #555;
             font-weight: 600;
         }
         .nav-tabs .nav-link.active {
-            color: var(--primary-color) !important;
-            border-top: 3px solid var(--primary-color);
-        }
-        .section-title {
-            background-color: #e9ecef;
-            padding: 6px 12px;
-            font-weight: bold;
-            color: var(--primary-color);
-            border-left: 4px solid var(--secondary-color);
-            margin-top: 15px;
-            margin-bottom: 15px;
-        }
-        .btn-mirin-primary {
-            background-color: var(--primary-color);
-            color: white;
-        }
-        .btn-mirin-primary:hover {
-            background-color: #000050;
-            color: white;
-        }
-        .status-badge {
-            font-size: 0.85rem;
-            padding: 5px 10px;
-            border-radius: 12px;
-        }
-
-        #access-denied, #main-content {
-            display: none;
+            color: var(--qc-primary) !important;
+            border-top: 3px solid var(--qc-primary);
         }
 
         .arquivo-atual-box {
             background: #eef2ff;
-            border: 1px dashed var(--primary-color);
+            border: 1px dashed var(--qc-primary);
             border-radius: 8px;
             padding: 10px 14px;
             display: flex;
@@ -182,44 +32,9 @@
         }
     </style>
 </head>
-<body>
+<body class="qc-body">
 
-    <div id="carregando" style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:#666;">Carregando...</div>
-
-    <div class="container my-4">
-
-        <a href="../index.html" style="display:inline-block;margin-bottom:12px;color:#000080;font-size:13px;text-decoration:none;">&larr; Voltar à Central de Qualidade</a>
-
-        <div class="header-container" id="app-header" style="display: none;">
-            <div class="logo-box">
-                <img src="https://mirindosul.com.br/wp-content/themes/estrutura-basica/assets/images/logo.png" alt="Viação Mirim Logo">
-            </div>
-            <div class="header">
-                <h1 id="titulo-dinamico-cabecalho">Aprovação de Documentos</h1>
-            </div>
-            <div class="header-right-panel">
-                <div class="iso-info-card">
-                    <div class="iso-field-group">
-                        <span>Elaboração</span>
-                        <input type="text" id="iso-elaboracao" class="iso-editable" placeholder="Data..." readonly>
-                    </div>
-                    <div class="iso-field-group">
-                        <span>Revisão</span>
-                        <input type="text" id="iso-revisao" class="iso-editable" placeholder="Data..." readonly>
-                    </div>
-                    <div class="iso-field-group">
-                        <span>Nº Rev.</span>
-                        <input type="text" id="iso-num-revisao" class="iso-editable" style="width:40px; text-align:center;" placeholder="00" readonly>
-                    </div>
-                </div>
-                <div class="session-card">
-                    <span class="usuario-badge" id="user-display">---</span>
-                    <button class="btn btn-sm btn-outline-danger py-0 px-2 mt-1" id="btn-sair" style="font-size: 11px;"><i class="bi bi-power"></i> Sair</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="main-content">
+    <div id="qc-page-content">
 
             <ul class="nav nav-tabs mb-4" id="moduleTabs" role="tablist">
                 <li class="nav-item" role="presentation">
@@ -292,16 +107,16 @@
                                 </div>
                             </div>
 
-                            <div class="section-title">DESCRIÇÃO / MOTIVO DA EMISSÃO OU REVISÃO</div>
+                            <div class="qc-section-title">DESCRIÇÃO / MOTIVO DA EMISSÃO OU REVISÃO</div>
                             <div class="mb-3">
                                 <textarea id="descricao_motivo" class="form-control" rows="3" placeholder="Detalhe o motivo da emissão ou o que mudou nesta revisão..." required></textarea>
                             </div>
 
-                            <div class="section-title">STATUS DA APROVAÇÃO</div>
+                            <div class="qc-section-title">STATUS DA APROVAÇÃO</div>
                             <div class="row g-3 bg-white p-3 rounded border">
                                 <div class="col-md-4">
                                     <label class="form-label">Situação Atual</label>
-                                    <div><span class="status-badge bg-warning text-dark" id="badge-status-form">Pendente</span></div>
+                                    <div><span class="qc-status-badge bg-warning text-dark" id="badge-status-form">Pendente</span></div>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label">Aprovado/Reprovado por</label>
@@ -323,7 +138,7 @@
                                 <button type="button" class="btn btn-outline-secondary me-2" id="btn-limpar"><i class="bi bi-eraser-fill me-2"></i>Limpar / Novo</button>
                                 <button type="button" class="btn btn-outline-danger" id="btn-excluir-form" style="display: none;"><i class="bi bi-trash-fill me-2"></i>Excluir Registro</button>
                             </div>
-                            <button type="submit" class="btn btn-mirin-primary px-5"><i class="bi bi-cloud-check-fill me-2"></i>Salvar Registro no Firebase</button>
+                            <button type="submit" class="qc-btn qc-btn-primary px-5"><i class="bi bi-cloud-check-fill me-2"></i>Salvar Registro no Firebase</button>
                         </div>
                     </form>
                 </div>
@@ -383,82 +198,34 @@
                 </div>
 
             </div>
-        </div>
     </div>
 
     <script type="module">
         import { auth, db } from '../firebase-config.js';
-        import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-        import { doc, getDoc, setDoc, updateDoc, collection, query, getDocs, orderBy, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { doc, setDoc, updateDoc, collection, query, getDocs, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { initLayout, escapeHtml } from '../assets/layout.js';
         // Upload de arquivo (Firebase Storage) desativado por enquanto — exige plano pago (Blaze).
-
-        function escapeHtml(str) {
-            if (str === null || str === undefined) return '';
-            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-        }
 
         let documentosCarregados = [];
         let usuarioUnidade = "";
 
-        document.getElementById('btn-sair').addEventListener('click', () => signOut(auth));
-
-        onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                window.location.href = '../index.html';
-                return;
-            }
-
-            const perfilSnap = await getDoc(doc(db, 'usuarios_perfil', user.uid));
-            const perfil = perfilSnap.exists() ? perfilSnap.data() : null;
-
-            if (!perfil || perfil.papel !== 'qualidade') {
-                alert('Este módulo é exclusivo para a equipe da qualidade.');
-                window.location.href = '../index.html';
-                return;
-            }
-
+        initLayout({
+            auth, db,
+            activeSlug: 'aprovacao-documentos',
+            pageTitle: 'Aprovação de Documentos',
+            breadcrumb: 'Qualidade',
+            isoDocId: 'iso_aprovacao_documentos',
+            homeHref: '../index.html',
+            papelExigido: 'qualidade'
+        }).then(({ perfil }) => {
             usuarioUnidade = perfil.unidade;
-            document.getElementById('user-display').innerText = usuarioUnidade;
-
-            document.getElementById('carregando').style.display = 'none';
-            document.getElementById('app-header').style.display = 'flex';
-            document.getElementById('main-content').style.display = 'block';
-
-            document.querySelectorAll('.iso-editable').forEach(el => el.removeAttribute('readonly'));
-
             definirDataDeHoje();
-            inicializarEscutaISO();
             carregarPainelControle();
-        });
+        }).catch(err => console.error('Falha ao montar layout:', err));
 
         function definirDataDeHoje() {
             document.getElementById('data_elaboracao').value = new Date().toISOString().split('T')[0];
         }
-
-        function inicializarEscutaISO() {
-            onSnapshot(doc(db, "configuracoes", "iso_aprovacao_documentos"), (docSnap) => {
-                if (docSnap.exists()) {
-                    const d = docSnap.data();
-                    document.getElementById('iso-elaboracao').value = d.elaboracao || '';
-                    document.getElementById('iso-revisao').value = d.revisao || '';
-                    document.getElementById('iso-num-revisao').value = d.numRevisao || '';
-                } else {
-                    document.getElementById('iso-elaboracao').value = '';
-                    document.getElementById('iso-revisao').value = '';
-                    document.getElementById('iso-num-revisao').value = '';
-                }
-            });
-        }
-
-        ['iso-elaboracao', 'iso-revisao', 'iso-num-revisao'].forEach(id => {
-            document.getElementById(id).addEventListener('change', () => {
-                setDoc(doc(db, "configuracoes", "iso_aprovacao_documentos"), {
-                    elaboracao: document.getElementById('iso-elaboracao').value,
-                    revisao: document.getElementById('iso-revisao').value,
-                    numRevisao: document.getElementById('iso-num-revisao').value
-                });
-            });
-        });
 
         async function gerarProximoNumeroSequencial() {
             try {
@@ -489,7 +256,7 @@
         function atualizarBadgeFormulario(status) {
             const badge = document.getElementById('badge-status-form');
             badge.innerText = status;
-            badge.className = "status-badge " + badgeClassePorStatus(status);
+            badge.className = "qc-status-badge " + badgeClassePorStatus(status);
         }
 
         document.getElementById('form-documento').addEventListener('submit', async (e) => {
@@ -616,7 +383,7 @@
                     <td class="text-truncate" style="max-width: 260px;">${escapeHtml(item.titulo_documento || '')}</td>
                     <td><span class="badge bg-secondary">${escapeHtml(item.tipo_documento || '')}</span></td>
                     <td class="text-center">${escapeHtml(item.versao_revisao || '')}</td>
-                    <td><span class="status-badge ${bc}">${escapeHtml(item.status_documento || 'Pendente')}</span></td>
+                    <td><span class="qc-status-badge ${bc}">${escapeHtml(item.status_documento || 'Pendente')}</span></td>
                     <td class="text-center">
                         <div class="btn-group btn-group-sm" role="group">
                             <button class="btn btn-outline-primary btn-abrir" data-id="${item.id}" title="Abrir"><i class="bi bi-pencil-square"></i></button>
