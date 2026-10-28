@@ -10,6 +10,13 @@
     /* Estilos específicos deste módulo. O resto (sidebar, topbar, cards,
        botões, seções) vem de assets/layout.css. */
 
+    .doc-topo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
     .doc-busca {
       display: flex;
       align-items: center;
@@ -17,8 +24,9 @@
       background: #fff;
       border-radius: 10px;
       padding: 10px 16px;
-      margin-bottom: 18px;
       box-shadow: 0 4px 12px rgba(0,0,0,.08);
+      flex: 1;
+      min-width: 220px;
     }
     .doc-busca i { color: #888; }
     .doc-busca input {
@@ -33,7 +41,7 @@
     .doc-linha {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
       padding: 10px 6px;
       border-bottom: 1px solid #eee;
     }
@@ -50,7 +58,8 @@
       min-width: 58px;
       text-align: center;
     }
-    .doc-titulo { flex: 1; min-width: 0; font-size: 13.5px; color: #333; }
+    .doc-titulo { flex: 1; min-width: 0; font-size: 13.5px; color: #333; cursor: pointer; }
+    .doc-titulo:hover { text-decoration: underline; color: var(--qc-primary); }
     .doc-rev {
       font-size: 11px;
       font-weight: 700;
@@ -61,56 +70,111 @@
       flex-shrink: 0;
       white-space: nowrap;
     }
-    .doc-btn-baixar {
-      flex-shrink: 0;
-      white-space: nowrap;
-    }
-
-    .qc-card.doc-vazio-categoria { display: none; }
+    .doc-linha-acoes { display: flex; gap: 6px; flex-shrink: 0; }
+    .doc-linha-acoes .qc-btn { padding: 5px 10px; font-size: 12px; }
 
     #doc-estado-vazio, #doc-estado-erro, #doc-estado-carregando {
       display: none;
     }
+
+    /* FICHA DE LEITURA / EDIÇÃO (drawer) */
+    .drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; z-index: 9000; }
+    .drawer-overlay.open { display: block; }
+    .drawer-panel {
+      position: fixed; top: 0; right: -720px; width: 720px; max-width: 96vw; height: 100vh;
+      background: #f4f6f9; z-index: 9001; box-shadow: -6px 0 25px rgba(0,0,0,.25);
+      transition: right .25s ease; overflow-y: auto;
+    }
+    .drawer-panel.open { right: 0; }
+    .drawer-header {
+      background: var(--qc-primary); color: #fff; padding: 16px 20px;
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      position: sticky; top: 0; z-index: 2;
+    }
+    .drawer-header h2 { font-size: 15px; text-transform: uppercase; margin: 0; }
+    .drawer-header .sub { font-size: 11px; opacity: .85; font-weight: normal; text-transform: none; }
+    .drawer-close { background: rgba(255,255,255,.15); color: #fff; border: none; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 15px; flex-shrink: 0; }
+    .drawer-body { padding: 18px 20px; }
+
+    .doc-meta-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 10px;
+      background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-bottom: 16px;
+    }
+    .doc-meta-grid .k { font-size: 10px; color: #888; text-transform: uppercase; font-weight: bold; display: block; }
+    .doc-meta-grid .val { font-size: 13px; font-weight: bold; color: #000050; display: block; }
+
+    .doc-conteudo-leitura {
+      background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 18px;
+      white-space: pre-wrap; font-size: 13.5px; line-height: 1.6; color: #333;
+      min-height: 120px;
+    }
+
+    .doc-form label { display: block; font-size: 11px; font-weight: bold; color: #666; margin: 12px 0 4px; text-transform: uppercase; }
+    .doc-form input[type="text"], .doc-form select, .doc-form textarea {
+      width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 13px; font-family: inherit;
+    }
+    .doc-form textarea { min-height: 320px; resize: vertical; white-space: pre-wrap; }
+    .doc-form .doc-form-linha { display: flex; gap: 10px; }
+    .doc-form .doc-form-linha > div { flex: 1; }
+    .doc-form-rodape { display: flex; justify-content: space-between; gap: 10px; margin-top: 18px; }
+
+    .doc-historico-item {
+      background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;
+    }
+    .doc-historico-item summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--qc-primary); }
+    .doc-historico-item .doc-conteudo-leitura { margin-top: 10px; font-size: 12.5px; }
+    .doc-aviso-historico-vazio { color: #888; font-size: 12.5px; padding: 10px; }
   </style>
 </head>
 <body class="qc-body">
 
   <div id="qc-page-content">
 
-    <div class="doc-busca">
-      <i class="bi bi-search"></i>
-      <input type="text" id="doc-busca-input" placeholder="Buscar por código ou título (ex: PG 04, Ações corretivas...)">
+    <div class="doc-topo">
+      <div class="doc-busca">
+        <i class="bi bi-search"></i>
+        <input type="text" id="doc-busca-input" placeholder="Buscar por código ou título (ex: PG 04, Ações corretivas...)">
+      </div>
+      <button type="button" class="qc-btn qc-btn-primary edit-only" id="doc-btn-novo" style="display:none;">
+        <i class="bi bi-plus-lg"></i> Novo documento
+      </button>
     </div>
 
     <div id="doc-estado-carregando" class="qc-aviso-vazio">Carregando documentos...</div>
-
-    <div id="doc-estado-erro" class="qc-aviso-vazio">
-      Não foi possível carregar a biblioteca agora. Tente recarregar a página.
-    </div>
-
-    <div id="doc-estado-vazio" class="qc-aviso-vazio">
-      Ainda não há documentos cadastrados na biblioteca.
-    </div>
+    <div id="doc-estado-erro" class="qc-aviso-vazio">Não foi possível carregar a biblioteca agora. Tente recarregar a página.</div>
+    <div id="doc-estado-vazio" class="qc-aviso-vazio">Ainda não há documentos cadastrados na biblioteca.</div>
 
     <div id="doc-categorias"></div>
 
   </div>
 
+  <!-- DRAWER: leitura / edição -->
+  <div class="drawer-overlay" id="doc-drawer-overlay"></div>
+  <div class="drawer-panel" id="doc-drawer">
+    <div class="drawer-header">
+      <div>
+        <h2 id="doc-drawer-titulo">Documento</h2>
+        <div class="sub" id="doc-drawer-subtitulo"></div>
+      </div>
+      <button type="button" class="drawer-close" id="doc-drawer-fechar">✕</button>
+    </div>
+    <div class="drawer-body" id="doc-drawer-corpo"></div>
+  </div>
+
   <script type="module">
-    import { auth, db, storage } from '../firebase-config.js';
-    import { collection, query, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-    import { ref, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+    import { auth, db } from '../firebase-config.js';
+    import {
+      collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, addDoc,
+      getDocs, serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
     import { initLayout, escapeHtml } from '../assets/layout.js';
 
-    // Ordem fixa de exibição das categorias (independe da ordem alfabética).
-    const ORDEM_CATEGORIAS = [
-      'Manual da Qualidade',
-      'Procedimentos Gerais',
-      'Instrução de Trabalho',
-      'Descrição de Funções'
-    ];
+    const CATEGORIAS_PADRAO = ['Manual da Qualidade', 'Procedimentos Gerais', 'Instrução de Trabalho', 'Descrição de Funções'];
 
     let documentosCarregados = [];
+    let podeEditar = false;
+    let perfilAtual = null;
+    let docEmEdicaoId = null; // null = criando novo
 
     initLayout({
       auth, db,
@@ -118,22 +182,29 @@
       pageTitle: 'Biblioteca de Documentos',
       breadcrumb: 'Qualidade',
       homeHref: '../index.html'
-    }).then(() => {
-      carregarBiblioteca();
+    }).then(({ perfil, souQualidade }) => {
+      perfilAtual = perfil;
+      podeEditar = !!souQualidade;
+      document.querySelectorAll('.edit-only').forEach(el => el.style.display = podeEditar ? 'inline-flex' : 'none');
+
       document.getElementById('doc-busca-input').addEventListener('input', renderizarBiblioteca);
+      document.getElementById('doc-btn-novo').addEventListener('click', () => abrirEdicao(null));
+      document.getElementById('doc-drawer-fechar').addEventListener('click', fecharDrawer);
+      document.getElementById('doc-drawer-overlay').addEventListener('click', fecharDrawer);
+
+      escutarBiblioteca();
     }).catch(err => console.error('Falha ao montar layout:', err));
 
-    async function carregarBiblioteca() {
+    function escutarBiblioteca() {
       mostrarEstado('carregando');
-      try {
-        const q = query(collection(db, 'biblioteca_documentos'), orderBy('codigo'));
-        const snap = await getDocs(q);
+      const q = query(collection(db, 'biblioteca_documentos'), orderBy('codigo'));
+      onSnapshot(q, (snap) => {
         documentosCarregados = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         renderizarBiblioteca();
-      } catch (err) {
+      }, (err) => {
         console.error('Erro ao carregar biblioteca de documentos:', err);
         mostrarEstado('erro');
-      }
+      });
     }
 
     function mostrarEstado(nome) {
@@ -146,12 +217,13 @@
     function renderizarBiblioteca() {
       if (!documentosCarregados.length) {
         mostrarEstado('vazio');
+        document.getElementById('doc-estado-vazio').textContent = 'Ainda não há documentos cadastrados na biblioteca.';
         return;
       }
 
       const termo = document.getElementById('doc-busca-input').value.trim().toLowerCase();
-      const filtrados = !termo ? documentosCarregados : documentosCarregados.filter(doc => {
-        const alvo = `${doc.codigo || ''} ${doc.titulo || ''}`.toLowerCase();
+      const filtrados = !termo ? documentosCarregados : documentosCarregados.filter(d => {
+        const alvo = `${d.codigo || ''} ${d.titulo || ''}`.toLowerCase();
         return alvo.includes(termo);
       });
 
@@ -164,16 +236,16 @@
       mostrarEstado('ok');
 
       const porCategoria = {};
-      filtrados.forEach(doc => {
-        const cat = doc.categoria || 'Outros';
+      filtrados.forEach(d => {
+        const cat = d.categoria || 'Outros';
         if (!porCategoria[cat]) porCategoria[cat] = [];
-        porCategoria[cat].push(doc);
+        porCategoria[cat].push(d);
       });
 
       const categorias = Object.keys(porCategoria).sort((a, b) => {
-        const ia = ORDEM_CATEGORIAS.indexOf(a);
-        const ib = ORDEM_CATEGORIAS.indexOf(b);
-        if (ia === -1 && ib === -1) return a.localeCompare(b);
+        const ia = CATEGORIAS_PADRAO.indexOf(a);
+        const ib = CATEGORIAS_PADRAO.indexOf(b);
+        if (ia === -1 && ib === -1) return a.localeCompare(b, 'pt-BR');
         if (ia === -1) return 1;
         if (ib === -1) return -1;
         return ia - ib;
@@ -186,14 +258,14 @@
           <div class="qc-card">
             <div class="qc-section-title">${escapeHtml(cat)}</div>
             <div class="doc-lista">
-              ${docs.map(doc => `
+              ${docs.map(d => `
                 <div class="doc-linha">
-                  <span class="doc-codigo">${escapeHtml(doc.codigo || '')}</span>
-                  <span class="doc-titulo">${escapeHtml(doc.titulo || '')}</span>
-                  ${doc.revisao ? `<span class="doc-rev">Rev. ${escapeHtml(doc.revisao)}</span>` : ''}
-                  <button type="button" class="qc-btn qc-btn-primary doc-btn-baixar" data-storage-path="${escapeHtml(doc.storagePath || '')}">
-                    <i class="bi bi-download"></i> Baixar
-                  </button>
+                  <span class="doc-codigo">${escapeHtml(d.codigo || '')}</span>
+                  <span class="doc-titulo" data-ler="${escapeHtml(d.id)}">${escapeHtml(d.titulo || '')}</span>
+                  ${d.revisao ? `<span class="doc-rev">Rev. ${escapeHtml(d.revisao)}</span>` : ''}
+                  <div class="doc-linha-acoes">
+                    <button type="button" class="qc-btn" data-ler="${escapeHtml(d.id)}">Ler</button>
+                  </div>
                 </div>
               `).join('')}
             </div>
@@ -201,30 +273,241 @@
         `;
       }).join('');
 
-      alvo.querySelectorAll('.doc-btn-baixar').forEach(btn => {
-        btn.addEventListener('click', () => baixarDocumento(btn));
+      alvo.querySelectorAll('[data-ler]').forEach(el => {
+        el.addEventListener('click', () => abrirLeitura(el.dataset.ler));
       });
     }
 
-    async function baixarDocumento(btn) {
-      const storagePath = btn.dataset.storagePath;
-      if (!storagePath) {
-        alert('Este documento ainda não tem um arquivo associado.');
+    function proximaCategoriaCustomOuPadrao(valorSelect, valorTexto) {
+      return valorSelect === '__outra__' ? (valorTexto || '').trim() : valorSelect;
+    }
+
+    function slugificar(texto) {
+      return (texto || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-zA-Z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase();
+    }
+
+    function proximaRevisao(revisaoAtual) {
+      const n = parseInt(revisaoAtual, 10);
+      const proximo = (isNaN(n) ? 0 : n) + 1;
+      return String(proximo).padStart(2, '0');
+    }
+
+    // ---------------------------------------------------------------
+    // DRAWER — LEITURA
+    // ---------------------------------------------------------------
+    function abrirLeitura(id) {
+      const d = documentosCarregados.find(x => x.id === id);
+      if (!d) return;
+
+      document.getElementById('doc-drawer-titulo').textContent = d.titulo || '(sem título)';
+      document.getElementById('doc-drawer-subtitulo').textContent = `${d.categoria || ''} · ${d.codigo || ''} · Revisão ${d.revisao || '—'}`;
+
+      const corpo = document.getElementById('doc-drawer-corpo');
+      corpo.innerHTML = `
+        <div class="doc-meta-grid">
+          <div><span class="k">Código</span><span class="val">${escapeHtml(d.codigo || '')}</span></div>
+          <div><span class="k">Categoria</span><span class="val">${escapeHtml(d.categoria || '')}</span></div>
+          <div><span class="k">Revisão</span><span class="val">${escapeHtml(d.revisao || '—')}</span></div>
+        </div>
+        <div class="doc-conteudo-leitura">${escapeHtml(d.conteudo || '(documento ainda sem conteúdo)')}</div>
+        <div class="doc-form-rodape">
+          <div>
+            ${podeEditar ? `<button type="button" class="qc-btn" id="doc-btn-historico">Ver revisões anteriores</button>` : ''}
+          </div>
+          ${podeEditar ? `<button type="button" class="qc-btn qc-btn-primary" id="doc-btn-editar-do-drawer">Editar / nova revisão</button>` : ''}
+        </div>
+        <div id="doc-historico-area"></div>
+      `;
+
+      if (podeEditar) {
+        document.getElementById('doc-btn-editar-do-drawer').addEventListener('click', () => abrirEdicao(id));
+        document.getElementById('doc-btn-historico').addEventListener('click', () => carregarHistorico(id));
+      }
+
+      abrirDrawer();
+    }
+
+    async function carregarHistorico(id) {
+      const area = document.getElementById('doc-historico-area');
+      area.innerHTML = '<div class="doc-aviso-historico-vazio">Carregando histórico...</div>';
+      try {
+        const q = query(collection(db, 'biblioteca_documentos', id, 'versoes_obsoletas'), orderBy('obsoletoEm', 'desc'));
+        const snap = await getDocs(q);
+        if (snap.empty) {
+          area.innerHTML = '<div class="doc-aviso-historico-vazio">Este documento ainda não teve nenhuma revisão substituída.</div>';
+          return;
+        }
+        area.innerHTML = snap.docs.map(docSnap => {
+          const v = docSnap.data();
+          const data = v.obsoletoEm && v.obsoletoEm.toDate ? v.obsoletoEm.toDate().toLocaleString('pt-BR') : '';
+          return `
+            <details class="doc-historico-item">
+              <summary>Revisão ${escapeHtml(v.revisao || '—')} — tornou-se obsoleta em ${escapeHtml(data)}</summary>
+              <div class="doc-conteudo-leitura">${escapeHtml(v.conteudo || '')}</div>
+            </details>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('Erro ao carregar histórico:', err);
+        area.innerHTML = '<div class="doc-aviso-historico-vazio">Não foi possível carregar o histórico agora.</div>';
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // DRAWER — EDIÇÃO / CRIAÇÃO
+    // ---------------------------------------------------------------
+    function abrirEdicao(id) {
+      docEmEdicaoId = id;
+      const d = id ? documentosCarregados.find(x => x.id === id) : null;
+      const categoriaAtual = d ? d.categoria : '';
+      const categoriaEhPadrao = CATEGORIAS_PADRAO.includes(categoriaAtual);
+
+      document.getElementById('doc-drawer-titulo').textContent = d ? 'Editar documento' : 'Novo documento';
+      document.getElementById('doc-drawer-subtitulo').textContent = d
+        ? `Salvar vai criar a revisão ${proximaRevisao(d.revisao)} e mover a revisão ${d.revisao || '—'} atual para o histórico.`
+        : 'Preencha os dados do novo documento.';
+
+      const corpo = document.getElementById('doc-drawer-corpo');
+      corpo.innerHTML = `
+        <div class="doc-form">
+          <div class="doc-form-linha">
+            <div>
+              <label>Categoria</label>
+              <select id="doc-form-categoria">
+                ${CATEGORIAS_PADRAO.map(c => `<option value="${escapeHtml(c)}" ${c === categoriaAtual ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+                <option value="__outra__" ${!categoriaEhPadrao && categoriaAtual ? 'selected' : ''}>Outra...</option>
+              </select>
+            </div>
+            <div id="doc-form-categoria-outra-wrap" style="display:${!categoriaEhPadrao && categoriaAtual ? 'block' : 'none'};">
+              <label>Nome da categoria</label>
+              <input type="text" id="doc-form-categoria-outra" value="${!categoriaEhPadrao ? escapeHtml(categoriaAtual) : ''}">
+            </div>
+          </div>
+          <div class="doc-form-linha">
+            <div>
+              <label>Código (ex: PG 01, IT 05, DF 10)</label>
+              <input type="text" id="doc-form-codigo" value="${escapeHtml(d ? d.codigo : '')}" ${d ? 'readonly' : ''}>
+            </div>
+            <div>
+              <label>Título</label>
+              <input type="text" id="doc-form-titulo" value="${escapeHtml(d ? d.titulo : '')}">
+            </div>
+          </div>
+          <label>Conteúdo do documento</label>
+          <textarea id="doc-form-conteudo">${escapeHtml(d ? d.conteudo || '' : '')}</textarea>
+          <div class="doc-form-rodape">
+            <button type="button" class="qc-btn" id="doc-form-cancelar">Cancelar</button>
+            <button type="button" class="qc-btn qc-btn-primary" id="doc-form-salvar">
+              ${d ? 'Salvar nova revisão' : 'Criar documento'}
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('doc-form-categoria').addEventListener('change', (e) => {
+        document.getElementById('doc-form-categoria-outra-wrap').style.display = e.target.value === '__outra__' ? 'block' : 'none';
+      });
+      document.getElementById('doc-form-cancelar').addEventListener('click', () => (d ? abrirLeitura(id) : fecharDrawer()));
+      document.getElementById('doc-form-salvar').addEventListener('click', () => salvarDocumento(id));
+
+      abrirDrawer();
+    }
+
+    async function salvarDocumento(idExistente) {
+      const btnSalvar = document.getElementById('doc-form-salvar');
+      const categoriaSelect = document.getElementById('doc-form-categoria').value;
+      const categoriaOutra = document.getElementById('doc-form-categoria-outra')?.value || '';
+      const categoria = proximaCategoriaCustomOuPadrao(categoriaSelect, categoriaOutra);
+      const codigo = document.getElementById('doc-form-codigo').value.trim();
+      const titulo = document.getElementById('doc-form-titulo').value.trim();
+      const conteudo = document.getElementById('doc-form-conteudo').value;
+
+      if (!categoria || !codigo || !titulo) {
+        alert('Preencha ao menos categoria, código e título.');
         return;
       }
-      const textoOriginal = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Abrindo...';
+
+      btnSalvar.disabled = true;
+      btnSalvar.textContent = 'Salvando...';
+
       try {
-        const url = await getDownloadURL(ref(storage, storagePath));
-        window.open(url, '_blank');
+        if (idExistente) {
+          const atual = documentosCarregados.find(x => x.id === idExistente);
+          const docRef = doc(db, 'biblioteca_documentos', idExistente);
+
+          if (atual && atual.conteudo !== undefined) {
+            await addDoc(collection(docRef, 'versoes_obsoletas'), {
+              revisao: atual.revisao || '',
+              titulo: atual.titulo || '',
+              conteudo: atual.conteudo || '',
+              obsoletoEm: serverTimestamp()
+            });
+          }
+
+          await updateDoc(docRef, {
+            categoria, codigo, titulo, conteudo,
+            revisao: proximaRevisao(atual ? atual.revisao : '0'),
+            atualizadoEm: serverTimestamp(),
+            atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
+          });
+        } else {
+          const novoId = `${slugificar(categoria)}--${slugificar(codigo)}`;
+          const existente = documentosCarregados.find(x => x.id === novoId);
+          const docRef = doc(db, 'biblioteca_documentos', novoId);
+
+          if (existente) {
+            if (!confirm('Já existe um documento com esse código nessa categoria. Quer sobrescrever (vira uma nova revisão dele)?')) {
+              btnSalvar.disabled = false;
+              btnSalvar.textContent = 'Criar documento';
+              return;
+            }
+            await addDoc(collection(docRef, 'versoes_obsoletas'), {
+              revisao: existente.revisao || '',
+              titulo: existente.titulo || '',
+              conteudo: existente.conteudo || '',
+              obsoletoEm: serverTimestamp()
+            });
+            await updateDoc(docRef, {
+              categoria, codigo, titulo, conteudo,
+              revisao: proximaRevisao(existente.revisao),
+              atualizadoEm: serverTimestamp(),
+              atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
+            });
+          } else {
+            await setDoc(docRef, {
+              categoria, codigo, titulo, conteudo,
+              revisao: '01',
+              atualizadoEm: serverTimestamp(),
+              atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
+            });
+          }
+        }
+
+        fecharDrawer();
       } catch (err) {
-        console.error('Erro ao baixar documento:', err);
-        alert('Não foi possível baixar este documento agora.');
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = textoOriginal;
+        console.error('Erro ao salvar documento:', err);
+        alert('Não foi possível salvar o documento agora.');
+        btnSalvar.disabled = false;
+        btnSalvar.textContent = idExistente ? 'Salvar nova revisão' : 'Criar documento';
       }
+    }
+
+    // ---------------------------------------------------------------
+    // DRAWER — abrir/fechar
+    // ---------------------------------------------------------------
+    function abrirDrawer() {
+      document.getElementById('doc-drawer-overlay').classList.add('open');
+      document.getElementById('doc-drawer').classList.add('open');
+    }
+
+    function fecharDrawer() {
+      document.getElementById('doc-drawer-overlay').classList.remove('open');
+      document.getElementById('doc-drawer').classList.remove('open');
+      docEmEdicaoId = null;
     }
   </script>
 </body>
