@@ -182,5 +182,21 @@ service cloud.firestore {
       allow read: if temPermissao("indicadores");
       allow write: if souQualidade();
     }
+
+    // ------------------------------------------------------------------
+    // BIBLIOTECA DE DOCUMENTOS (Manual, PG, IT, Descrição de funções...)
+    // Leitura pra quem tem o módulo liberado, escrita só qualidade.
+    // Cada documento guarda um histórico de revisões obsoletas numa
+    // subcoleção, pra manter o controle de versão exigido pela ISO 9001.
+    // ------------------------------------------------------------------
+    match /biblioteca_documentos/{id} {
+      allow read: if temPermissao("documentos");
+      allow write: if souQualidade();
+
+      match /versoes_obsoletas/{verId} {
+        allow read: if temPermissao("documentos");
+        allow write: if souQualidade();
+      }
+    }
   }
 }
