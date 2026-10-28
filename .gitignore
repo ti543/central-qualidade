@@ -1,0 +1,10 @@
+# Nunca versionar chaves/senhas por engano (defesa extra; nada disso deveria
+# estar dentro de web/ de qualquer forma).
+*.key
+*.pem
+sa.json
+Senha.txt
+.env
+.env.*
+Thumbs.db
+.DS_Store

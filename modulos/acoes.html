@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RG 34 / RG 35 - Gestão de Ações</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="../assets/layout.css" rel="stylesheet">
+    <style>
+        /* Estilos específicos deste módulo. O resto (sidebar, topbar, cards,
+           botões, seções) vem de assets/layout.css. */
+
+        .nav-tabs .nav-link {
+            color: #555;
+            font-weight: 600;
+        }
+        .nav-tabs .nav-link.active {
+            color: var(--qc-primary) !important;
+            border-top: 3px solid var(--qc-primary);
+        }
+
+        /* 5 PORQUES */
+        .porque-input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .porque-number {
+            background: #6c757d;
+            color: white;
+            font-weight: bold;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body class="qc-body">
+
+    <div id="qc-page-content">
+
+        <ul class="nav nav-tabs mb-4" id="moduleTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="cadastro-tab" data-bs-toggle="tab" data-bs-target="#cadastro-panel" type="button" role="tab"><i class="bi bi-file-earmark-plus-fill me-2"></i>RG 34 - Registro</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="controle-tab" data-bs-toggle="tab" data-bs-target="#controle-panel" type="button" role="tab"><i class="bi bi-table me-2"></i>RG 35 - Controle</button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="moduleTabsContent">
+
+            <div class="tab-pane fade show active" id="cadastro-panel" role="tabpanel">
+                <form id="form-rg34" class="card shadow-sm">
+                    <input type="hidden" id="doc-id">
+
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-2">
+                                <label class="form-label font-monospace">Nº Registro</label>
+                                <input type="text" id="num_registro" class="form-control text-center fw-bold text-primary font-monospace" placeholder="Automático" readonly>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Processo</label>
+                                <select id="processo" class="form-select" required>
+                                    <option value="Operação">Operação</option>
+                                    <option value="Qualidade">Qualidade</option>
+                                    <option value="Comercial">Comercial</option>
+                                    <option value="Financeiro/Adm">Financeiro/Adm</option>
+                                    <option value="TI">TI</option>
+                                    <option value="Gestão de Frota/Compras">Gestão de Frota/Compras</option>
+                                    <option value="RH">RH</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Data de Abertura</label>
+                                <input type="date" id="data_abertura" class="form-control" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Status Atual</label>
+                                <select id="status_acao" class="form-select bg-warning-subtle text-dark font-weight-bold">
+                                    <option value="Aberto">Aberto</option>
+                                    <option value="Em Andamento">Em Andamento</option>
+                                    <option value="Eficaz / Encerrado">Eficaz / Encerrado</option>
+                                    <option value="Ineficaz">Ineficaz</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-1">
+                            <div class="col-md-4">
+                                <label class="form-label">Aberto por:</label>
+                                <input type="text" id="aberto_por" class="form-control" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Responsável:</label>
+                                <input type="text" id="responsavel_geral" class="form-control" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Equipe de Resolução:</label>
+                                <input type="text" id="equipe_resolucao" class="form-control" placeholder="Ex: Gestor de Qualidade, TI">
+                            </div>
+                        </div>
+
+                        <div class="qc-section-title">CLASSIFICAÇÃO DO REGISTRO</div>
+                        <div class="row text-center bg-white p-3 rounded border">
+                            <div class="col-md-4 border-end">
+                                <h6>TIPO DE AÇÃO</h6>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="tipo_acao" id="tipo_corretiva" value="Corretiva" checked>
+                                    <label class="form-check-label" for="tipo_corretiva">Corretiva</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="tipo_acao" id="tipo_preventiva" value="Preventiva">
+                                    <label class="form-check-label" for="tipo_preventiva">Preventiva</label>
+                                </div>
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="radio" name="tipo_acao" id="tipo_melhoria" value="Melhoria">
+                                    <label class="form-check-label" for="tipo_melhoria">Melhoria</label>
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <h6>ORIGEM / GERADO POR</h6>
+                                <div class="d-flex flex-wrap justify-content-center gap-3">
+                                    <div class="form-check"><input class="form-check-input" type="radio" name="origem_acao" id="orig_nc" value="Não conformidade" checked><label class="form-check-label" for="orig_nc">Não conformidade</label></div>
+                                    <div class="form-check"><input class="form-check-input" type="radio" name="origem_acao" id="orig_aud_int" value="Auditoria interna"><label class="form-check-label" for="orig_aud_int">Auditoria Interna</label></div>
+                                    <div class="form-check"><input class="form-check-input" type="radio" name="origem_acao" id="orig_reclamacao" value="Reclamação de cliente"><label class="form-check-label" for="orig_reclamacao">Reclamação de Cliente</label></div>
+                                    <div class="form-check"><input class="form-check-input" type="radio" name="origem_acao" id="orig_aud_ext" value="Auditoria externa"><label class="form-check-label" for="orig_aud_ext">Auditoria Externa</label></div>
+                                    <div class="form-check"><input class="form-check-input" type="radio" name="origem_acao" id="orig_mudanca" value="Mudanças no SGQ"><label class="form-check-label" for="orig_mudanca">Mudanças no SGQ</label></div>
+                                    <div class="form-check"><input class="form-check-input" type="radio" name="origem_acao" id="orig_indicadores" value="Análise de indicadores"><label class="form-check-label" for="orig_indicadores">Análise de Indicadores</label></div>
+                                    <div class="form-check"><input class="form-check-input" type="radio" name="origem_acao" id="orig_critica" value="Análise crítica e análise de riscos e oportunidades"><label class="form-check-label" for="orig_critica">Análise Crítica/Riscos</label></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="qc-section-title">DESCRIÇÃO E ABRANGÊNCIA</div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Descrição do Problema ou Oportunidade:</label>
+                            <textarea id="descricao_problema" class="form-control" rows="4" placeholder="Detalhe claramente o desvio..." required></textarea>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Abrangência:</label>
+                                <textarea id="abrangencia" class="form-control" rows="2" placeholder="Ex: Todas as filiais, apenas Matriz..." required></textarea>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Ação Imediata:</label>
+                                <textarea id="acao_imediata" class="form-control" rows="2" placeholder="Ex: Segregação imediata..."></textarea>
+                            </div>
+                        </div>
+
+                        <div class="qc-section-title">ANÁLISE DE CAUSA RAIZ (DIAGRAMA DE ISHIKAWA / 6M)</div>
+                        <div class="row g-3 bg-white p-2 rounded border">
+                            <div class="col-md-4"><label class="form-label">Mão de Obra</label><textarea id="m_mao_obra" class="form-control form-control-sm" rows="2"></textarea></div>
+                            <div class="col-md-4"><label class="form-label">Materiais</label><textarea id="m_materiais" class="form-control form-control-sm" rows="2"></textarea></div>
+                            <div class="col-md-4"><label class="form-label">Método (Procedimento)</label><textarea id="m_metodo" class="form-control form-control-sm" rows="2"></textarea></div>
+                            <div class="col-md-4"><label class="form-label">Meio Ambiente</label><textarea id="m_meio_ambiente" class="form-control form-control-sm" rows="2"></textarea></div>
+                            <div class="col-md-4"><label class="form-label">Medida</label><textarea id="m_medida" class="form-control form-control-sm" rows="2"></textarea></div>
+                            <div class="col-md-4"><label class="form-label">Máquinas e Equipamentos</label><textarea id="m_maquinas" class="form-control form-control-sm" rows="2"></textarea></div>
+                        </div>
+
+                        <div class="qc-section-title">ANÁLISE DE CAUSA - FERRAMENTA DOS 5 PORQUÊS</div>
+                        <div class="bg-white p-3 rounded border">
+                            <div class="porque-input-group">
+                                <div class="porque-number">1</div>
+                                <textarea id="pq1" class="form-control" rows="2" placeholder="Por que o problema inicial aconteceu?"></textarea>
+                            </div>
+                            <div class="porque-input-group">
+                                <div class="porque-number">2</div>
+                                <textarea id="pq2" class="form-control" rows="2" placeholder="Por que aconteceu o motivo relatado no primeiro porquê?"></textarea>
+                            </div>
+                            <div class="porque-input-group">
+                                <div class="porque-number">3</div>
+                                <textarea id="pq3" class="form-control" rows="2" placeholder="Por que aconteceu o motivo relatado no segundo porquê?"></textarea>
+                            </div>
+                            <div class="porque-input-group">
+                                <div class="porque-number">4</div>
+                                <textarea id="pq4" class="form-control" rows="2" placeholder="Por que aconteceu o motivo relatado no terceiro porquê?"></textarea>
+                            </div>
+                            <div class="porque-input-group">
+                                <div class="porque-number">5</div>
+                                <textarea id="pq5" class="form-control" rows="2" placeholder="Por que aconteceu o motivo relatado no quarto porquê?"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="qc-section-title d-flex justify-content-between align-items-center">
+                            <span>PLANO DE AÇÃO (5W2H SIMPLIFICADO)</span>
+                            <button type="button" class="btn btn-sm btn-dark" id="btn-add-item-plano"><i class="bi bi-plus-circle me-1"></i>Adicionar Linha de Ação</button>
+                        </div>
+                        <table class="table table-bordered bg-white" id="tabela-plano">
+                            <thead class="table-light">
+                                <tr class="text-center" style="font-size:0.9rem;">
+                                    <th style="width: 50%;">Ação / O que fazer</th>
+                                    <th style="width: 20%;">Responsável</th>
+                                    <th style="width: 15%;">Prazo</th>
+                                    <th style="width: 10%;">Realizado?</th>
+                                    <th style="width: 5%;">Excluir</th>
+                                </tr>
+                            </thead>
+                            <tbody id="corpo-plano">
+                            </tbody>
+                        </table>
+
+                        <div class="qc-section-title">AVALIAÇÃO DE IMPACTO NO SGQ</div>
+                        <div class="row g-3 align-items-center">
+                            <div class="col-md-6 d-flex align-items-center gap-3">
+                                <span>É necessária revisão da planilha de Riscos e Oportunidades?</span>
+                                <div class="form-check"><input type="radio" class="form-check-input" name="revisao_riscos" id="risco_sim" value="SIM"><label class="form-check-label" for="risco_sim">SIM</label></div>
+                                <div class="form-check"><input type="radio" class="form-check-input" name="revisao_riscos" id="risco_nao" value="NÃO" checked><label class="form-check-label" for="risco_nao">NÃO</label></div>
+                            </div>
+                            <div class="col-md-6 d-flex align-items-center gap-3">
+                                <span>Essa ação gera alguma necessidade de mudança no SGQ?</span>
+                                <div class="form-check"><input type="radio" class="form-check-input" name="mudanca_sgq" id="sgq_sim" value="SIM"><label class="form-check-label" for="sgq_sim">SIM</label></div>
+                                <div class="form-check"><input type="radio" class="form-check-input" name="mudanca_sgq" id="sgq_nao" value="NÃO" checked><label class="form-check-label" for="sgq_nao">NÃO</label></div>
+                            </div>
+                        </div>
+
+                        <div class="qc-section-title">VERIFICAÇÃO DA IMPLANTAÇÃO E EFICÁCIA</div>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Data da Verificação Eficácia</label>
+                                <input type="date" id="data_verificacao" class="form-control">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Todas as ações implantadas?</label>
+                                <select id="acoes_implantadas" class="form-select">
+                                    <option value="">Selecione...</option>
+                                    <option value="SIM">SIM</option>
+                                    <option value="NÃO">NÃO</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">As ações foram eficazes?</label>
+                                <select id="acoes_eficazes" class="form-select">
+                                    <option value="">Selecione...</option>
+                                    <option value="SIM">SIM (Encerrar Processo)</option>
+                                    <option value="NÃO">NÃO (Abrir nova Causa)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label">Observações / Evidências de Fechamento</label>
+                                <textarea id="obs_eficacia" class="form-control" rows="3" placeholder="Evidências..."></textarea>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Verificado por:</label>
+                                <input type="text" id="verificado_por" class="form-control">
+                            </div>
+                        </div>
+
+                    </div>
+                    <div class="card-footer d-flex justify-content-between">
+                        <div>
+                            <button type="button" class="btn btn-outline-secondary me-2" id="btn-limpar"><i class="bi bi-eraser-fill me-2"></i>Limpar / Novo</button>
+                            <button type="button" class="btn btn-outline-danger" id="btn-excluir-form" style="display: none;"><i class="bi bi-trash-fill me-2"></i>Excluir Registro</button>
+                        </div>
+                        <button type="submit" class="qc-btn qc-btn-primary px-5"><i class="bi bi-cloud-check-fill me-2"></i>Salvar Registro no Firebase</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="tab-pane fade" id="controle-panel" role="tabpanel">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="row mb-3 g-2">
+                            <div class="col-md-6">
+                                <div class="input-group">
+                                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                    <input type="text" id="txt-busca" class="form-control" placeholder="Buscar...">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <select id="filtro-tipo" class="form-select">
+                                    <option value="">Todos os Tipos</option>
+                                    <option value="Corretiva">Corretiva</option>
+                                    <option value="Preventiva">Preventiva</option>
+                                    <option value="Melhoria">Melhoria</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select id="filtro-status" class="form-select">
+                                    <option value="">Todos os Status</option>
+                                    <option value="Aberto">Aberto</option>
+                                    <option value="Em Andamento">Em Andamento</option>
+                                    <option value="Eficaz / Encerrado">Eficaz / Encerrado</option>
+                                    <option value="Ineficaz">Ineficaz</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle table-striped border">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 8%;">Nº</th>
+                                        <th style="width: 12%;">Abertura</th>
+                                        <th style="width: 12%;">Tipo</th>
+                                        <th style="width: 15%;">Processo</th>
+                                        <th>Descrição</th>
+                                        <th style="width: 15%;">Responsável</th>
+                                        <th style="width: 12%;">Status</th>
+                                        <th style="width: 14%; text-align: center;">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-controle-corpo">
+                                </tbody>
+                            </table>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script type="module">
+        import { auth, db } from '../firebase-config.js';
+        import { signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+        import { doc, setDoc, collection, query, getDocs, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { initLayout, atualizarTopbar, escapeHtml } from '../assets/layout.js';
+
+        let acoesCarregadas = [];
+        let abaAtivaAtual = "rg34";
+
+        initLayout({
+            auth, db,
+            activeSlug: 'acoes',
+            pageTitle: 'RG 34 - Ação corretiva e preventiva',
+            breadcrumb: 'Qualidade',
+            isoDocId: 'iso_rg34',
+            homeHref: '../index.html',
+            papelExigido: 'qualidade'
+        }).then(() => {
+            definirDataDeHoje();
+            adicionarLinhaPlano("", "", "", false);
+            carregarPainelControle();
+            configurarAlternanciaDeAbas();
+        }).catch(err => console.error('Falha ao montar layout:', err));
+
+        function definirDataDeHoje() {
+            document.getElementById('data_abertura').value = new Date().toISOString().split('T')[0];
+        }
+
+        function configurarAlternanciaDeAbas() {
+            const tabCadastro = document.getElementById('cadastro-tab');
+            const tabControle = document.getElementById('controle-tab');
+
+            tabCadastro.addEventListener('shown.bs.tab', () => {
+                abaAtivaAtual = "rg34";
+                atualizarTopbar(db, { pageTitle: 'RG 34 - Ação corretiva e preventiva', isoDocId: 'iso_rg34' });
+            });
+
+            tabControle.addEventListener('shown.bs.tab', () => {
+                abaAtivaAtual = "rg35";
+                atualizarTopbar(db, { pageTitle: 'RG 35 - Controle das ações corretivas e preventivas', isoDocId: 'iso_rg35' });
+                carregarPainelControle();
+            });
+        }
+
+        const corpoPlano = document.getElementById('corpo-plano');
+        document.getElementById('btn-add-item-plano').addEventListener('click', () => adicionarLinhaPlano("", "", "", false));
+
+        function adicionarLinhaPlano(oque, quem, quando, feito) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><textarea class="form-control form-control-sm plano-oque" rows="2" required placeholder="O que fazer...">${escapeHtml(oque)}</textarea></td>
+                <td><input type="text" class="form-control form-control-sm plano-quem" value="${escapeHtml(quem)}" required placeholder="Nome"></td>
+                <td><input type="date" class="form-control form-control-sm plano-quando" value="${quando}" required></td>
+                <td class="text-center"><input type="checkbox" class="form-check-input plano-feito" ${feito ? 'checked' : ''}></td>
+                <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger btn-remover-linha"><i class="bi bi-x-lg"></i></button></td>
+            `;
+            tr.querySelector('.btn-remover-linha').addEventListener('click', () => tr.remove());
+            corpoPlano.appendChild(tr);
+        }
+
+        // CORREÇÃO E GARANTIA: SE DA BASE ESTIVER VAZIA, ADOTA ESTREITAMENTE "001"
+        async function gerarProximoNumeroSequencial() {
+            try {
+                const q = query(collection(db, "acoes_qualidade"), orderBy("num_registro", "desc"));
+                const snap = await getDocs(q);
+                if (snap.empty) {
+                    return "001";
+                } else {
+                    let maiorNum = 0;
+                    snap.forEach(doc => {
+                        const numStr = doc.data().num_registro;
+                        const numInt = parseInt(numStr, 10);
+                        if (!isNaN(numInt) && numInt > maiorNum) {
+                            maiorNum = numInt;
+                        }
+                    });
+                    const proximo = maiorNum + 1;
+                    return String(proximo).padStart(3, '0');
+                }
+            } catch (error) {
+                console.error("Erro ao calcular próximo número: ", error);
+                return "001";
+            }
+        }
+
+        // ROTINA PARA EXCLUSÃO DE DOCUMENTOS
+        async function deletarRegistro(id, numRegistro) {
+            if (confirm(`Tem certeza absoluta que deseja excluir a ação de Registro Nº ${numRegistro || ''}? Esta operação não poderá ser desfeita.`)) {
+                try {
+                    await deleteDoc(doc(db, "acoes_qualidade", id));
+                    alert("Ação excluída com sucesso!");
+                    limparFormulario();
+                    carregarPainelControle();
+                } catch (error) {
+                    console.error("Erro ao deletar:", error);
+                    alert("Erro ao tentar excluir o documento do Firestore.");
+                }
+            }
+        }
+
+        document.getElementById('btn-excluir-form').addEventListener('click', () => {
+            const currentId = document.getElementById('doc-id').value;
+            const currentNum = document.getElementById('num_registro').value;
+            if (currentId) {
+                deletarRegistro(currentId, currentNum);
+            }
+        });
+
+        document.getElementById('form-rg34').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            let id = document.getElementById('doc-id').value;
+            let numSeq = document.getElementById('num_registro').value;
+
+            if (!id) {
+                id = "AC-" + Date.now();
+                numSeq = await gerarProximoNumeroSequencial();
+            }
+
+            const plano_acao = [];
+            corpoPlano.querySelectorAll('tr').forEach(row => {
+                plano_acao.push({
+                    oque: row.querySelector('.plano-oque').value,
+                    quem: row.querySelector('.plano-quem').value,
+                    quando: row.querySelector('.plano-quando').value,
+                    feito: row.querySelector('.plano-feito').checked
+                });
+            });
+
+            const dados = {
+                id, num_registro: numSeq,
+                processo: document.getElementById('processo').value,
+                data_abertura: document.getElementById('data_abertura').value,
+                status_acao: document.getElementById('status_acao').value,
+                aberto_por: document.getElementById('aberto_por').value,
+                responsavel_geral: document.getElementById('responsavel_geral').value,
+                equipe_resolucao: document.getElementById('equipe_resolucao').value,
+                tipo_acao: document.querySelector('input[name="tipo_acao"]:checked').value,
+                origem_acao: document.querySelector('input[name="origem_acao"]:checked').value,
+                descricao_problema: document.getElementById('descricao_problema').value,
+                abrangencia: document.getElementById('abrangencia').value,
+                acao_imediata: document.getElementById('acao_imediata').value,
+                causas_ishikawa: {
+                    mao_obra: document.getElementById('m_mao_obra').value,
+                    materiais: document.getElementById('m_materiais').value,
+                    metodo: document.getElementById('m_metodo').value,
+                    meio_ambiente: document.getElementById('m_meio_ambiente').value,
+                    medida: document.getElementById('m_medida').value,
+                    maquinas: document.getElementById('m_maquinas').value
+                },
+                cinco_porques: {
+                    p1: document.getElementById('pq1').value,
+                    p2: document.getElementById('pq2').value,
+                    p3: document.getElementById('pq3').value,
+                    p4: document.getElementById('pq4').value,
+                    p5: document.getElementById('pq5').value
+                },
+                plano_acao,
+                revisao_riscos: document.querySelector('input[name="revisao_riscos"]:checked').value,
+                mudanca_sgq: document.querySelector('input[name="mudanca_sgq"]:checked').value,
+                eficacia: {
+                    data_verificacao: document.getElementById('data_verificacao').value,
+                    acoes_implantadas: document.getElementById('acoes_implantadas').value,
+                    acoes_eficazes: document.getElementById('acoes_eficazes').value,
+                    obs_eficacia: document.getElementById('obs_eficacia').value,
+                    verificado_por: document.getElementById('verificado_por').value
+                },
+                atualizado_em: new Date().toISOString()
+            };
+
+            try {
+                await setDoc(doc(db, "acoes_qualidade", id), dados);
+                alert("Registro salvo com sucesso como Nº " + numSeq + "!");
+                limparFormulario();
+                carregarPainelControle();
+            } catch (error) {
+                console.error(error);
+                alert("Erro ao salvar! Verifique as regras de segurança.");
+            }
+        });
+
+        async function carregarPainelControle() {
+            try {
+                const q = query(collection(db, "acoes_qualidade"), orderBy("num_registro", "desc"));
+                const querySnapshot = await getDocs(q);
+                acoesCarregadas = [];
+                querySnapshot.forEach(doc => acoesCarregadas.push(doc.data()));
+                renderizarTabelaControle(acoesCarregadas);
+            } catch (e) { console.error(e); }
+        }
+
+        function renderizarTabelaControle(dados) {
+            const corpo = document.getElementById('tabela-controle-corpo');
+            corpo.innerHTML = "";
+            dados.forEach(item => {
+                let bc = "bg-warning text-dark";
+                if(item.status_acao.includes("Eficaz")) bc = "bg-success text-white";
+                if(item.status_acao.includes("Ineficaz")) bc = "bg-danger text-white";
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="font-monospace fw-bold text-primary">#${item.num_registro || '---'}</td>
+                    <td>${item.data_abertura.split('-').reverse().join('/')}</td>
+                    <td><span class="badge bg-secondary">${item.tipo_acao}</span></td>
+                    <td>${item.processo}</td>
+                    <td class="text-truncate" style="max-width: 260px;">${escapeHtml(item.descricao_problema)}</td>
+                    <td>${escapeHtml(item.responsavel_geral)}</td>
+                    <td><span class="qc-status-badge ${bc}">${item.status_acao}</span></td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-primary btn-abrir" data-id="${item.id}" style="background:var(--qc-primary);border-color:var(--qc-primary);"><i class="bi bi-pencil-square"></i> Abrir</button>
+                        <button class="btn btn-sm btn-outline-danger btn-excluir-tabela" data-id="${item.id}" data-num="${item.num_registro}"><i class="bi bi-trash"></i></button>
+                    </td>
+                `;
+                tr.querySelector('.btn-abrir').addEventListener('click', () => abrirParaEdicao(item.id));
+                tr.querySelector('.btn-excluir-tabela').addEventListener('click', () => deletarRegistro(item.id, item.num_registro));
+                corpo.appendChild(tr);
+            });
+        }
+
+        function abrirParaEdicao(id) {
+            const item = acoesCarregadas.find(a => a.id === id);
+            if (!item) return;
+
+            document.getElementById('doc-id').value = item.id;
+            document.getElementById('num_registro').value = item.num_registro || "";
+            document.getElementById('processo').value = item.processo;
+            document.getElementById('data_abertura').value = item.data_abertura;
+            document.getElementById('status_acao').value = item.status_acao;
+            document.getElementById('aberto_por').value = item.aberto_por;
+            document.getElementById('responsavel_geral').value = item.responsavel_geral;
+            document.getElementById('equipe_resolucao').value = item.equipe_resolucao || "";
+            document.getElementById('descricao_problema').value = item.descricao_problema;
+            document.getElementById('abrangencia').value = item.abrangencia;
+            document.getElementById('acao_imediata').value = item.acao_imediata || "";
+
+            document.querySelector(`input[name="tipo_acao"][value="${item.tipo_acao}"]`).checked = true;
+            document.querySelector(`input[name="origem_acao"][value="${item.origem_acao}"]`).checked = true;
+
+            if(item.causas_ishikawa) {
+                document.getElementById('m_mao_obra').value = item.causas_ishikawa.mao_obra || "";
+                document.getElementById('m_materiais').value = item.causas_ishikawa.materiais || "";
+                document.getElementById('m_metodo').value = item.causas_ishikawa.metodo || "";
+                document.getElementById('m_meio_ambiente').value = item.causas_ishikawa.meio_ambiente || "";
+                document.getElementById('m_medida').value = item.causas_ishikawa.medida || "";
+                document.getElementById('m_maquinas').value = item.causas_ishikawa.maquinas || "";
+            }
+
+            if(item.cinco_porques) {
+                document.getElementById('pq1').value = item.cinco_porques.p1 || "";
+                document.getElementById('pq2').value = item.cinco_porques.p2 || "";
+                document.getElementById('pq3').value = item.cinco_porques.p3 || "";
+                document.getElementById('pq4').value = item.cinco_porques.p4 || "";
+                document.getElementById('pq5').value = item.cinco_porques.p5 || "";
+            }
+
+            corpoPlano.innerHTML = "";
+            if (item.plano_acao && item.plano_acao.length > 0) {
+                item.plano_acao.forEach(p => adicionarLinhaPlano(p.oque, p.quem, p.quando, p.feito));
+            } else {
+                adicionarLinhaPlano("", "", "", false);
+            }
+
+            document.querySelector(`input[name="revisao_riscos"][value="${item.revisao_riscos}"]`).checked = true;
+            document.querySelector(`input[name="mudanca_sgq"][value="${item.mudanca_sgq}"]`).checked = true;
+
+            if(item.eficacia) {
+                document.getElementById('data_verificacao').value = item.eficacia.data_verificacao || "";
+                document.getElementById('acoes_implantadas').value = item.eficacia.acoes_implantadas || "";
+                document.getElementById('acoes_eficazes').value = item.eficacia.acoes_eficazes || "";
+                document.getElementById('obs_eficacia').value = item.eficacia.obs_eficacia || "";
+                document.getElementById('verificado_por').value = item.eficacia.verificado_por || "";
+            }
+
+            document.getElementById('btn-excluir-form').style.display = 'inline-block';
+
+            const firstTab = new bootstrap.Tab(document.getElementById('cadastro-tab'));
+            firstTab.show();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function filtrarTabela() {
+            const termo = document.getElementById('txt-busca').value.toLowerCase();
+            const tipoFiltro = document.getElementById('filtro-tipo').value;
+            const statusFiltro = document.getElementById('filtro-status').value;
+
+            const filtrados = acoesCarregadas.filter(item => {
+                const num = (item.num_registro || '').toLowerCase();
+                const desc = (item.descricao_problema || '').toLowerCase();
+                const resp = (item.responsavel_geral || '').toLowerCase();
+                const proc = (item.processo || '').toLowerCase();
+
+                const atendeBusca = num.includes(termo) || desc.includes(termo) || resp.includes(termo) || proc.includes(termo);
+                const atendeTipo = !tipoFiltro || item.tipo_acao === tipoFiltro;
+                const atendeStatus = !statusFiltro || item.status_acao === statusFiltro;
+
+                return atendeBusca && atendeTipo && atendeStatus;
+            });
+
+            renderizarTabelaControle(filtrados);
+        }
+
+        document.getElementById('txt-busca').addEventListener('input', filtrarTabela);
+        document.getElementById('filtro-tipo').addEventListener('change', filtrarTabela);
+        document.getElementById('filtro-status').addEventListener('change', filtrarTabela);
+        document.getElementById('controle-tab').addEventListener('click', carregarPainelControle);
+
+        function limparFormulario() {
+            document.getElementById('form-rg34').reset();
+            document.getElementById('doc-id').value = "";
+            document.getElementById('num_registro').value = "";
+            document.getElementById('btn-excluir-form').style.display = 'none';
+            corpoPlano.innerHTML = "";
+            adicionarLinhaPlano("", "", "", false);
+            definirDataDeHoje();
+        }
+
+        document.getElementById('btn-limpar').addEventListener('click', limparFormulario);
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

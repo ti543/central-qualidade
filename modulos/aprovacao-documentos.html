@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aprovação de Documentos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #000080;
+            --secondary-color: #d92323;
+            --bg-light: #f8f9fa;
+        }
+        body {
+            background-color: var(--bg-light);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        /* TELA DE LOGIN */
+        #login-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f0f2f5;
+        }
+
+        /* ESTRUTURA DO TOPO */
+        .header-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            margin-bottom: 24px;
+            background: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+        .logo-box {
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+            height: 50px;
+            width: 130px;
+            justify-content: center;
+        }
+        .logo-box img {
+            max-height: 100%;
+            max-width: 100%;
+            display: block;
+            object-fit: contain;
+        }
+        .header {
+            flex-grow: 1;
+            text-align: center;
+        }
+
+        /* TÍTULO DINÂMICO GRANDE E AZUL NO TOPO */
+        .header h1 {
+            font-size: 26px;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: var(--primary-color);
+            letter-spacing: 0.3px;
+            margin: 0;
+            line-height: 1.2;
+        }
+
+        .header-right-panel {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-shrink: 0;
+        }
+        .iso-info-card {
+            background: #fdfdfd;
+            padding: 10px 16px;
+            border-radius: 8px;
+            border: 1px dashed var(--primary-color);
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            align-items: center;
+        }
+        .iso-field-group {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        .iso-field-group span {
+            font-size: 10px;
+            font-weight: 700;
+            color: #555;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .iso-editable {
+            border: none;
+            background: transparent;
+            font-size: 12px;
+            color: var(--primary-color);
+            font-weight: 700;
+            border-bottom: 1px solid #ccc;
+            padding: 2px;
+            width: 85px;
+            text-align: center;
+        }
+        .iso-editable:focus {
+            outline: none;
+            border-bottom: 2px solid var(--primary-color);
+            background: #f1f3f9;
+        }
+        .session-card {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 90px;
+            flex-shrink: 0;
+            border-left: 1px solid #ddd;
+            padding-left: 15px;
+            align-items: center;
+        }
+        .usuario-badge {
+            background: var(--primary-color);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            text-align: center;
+        }
+
+        .nav-tabs .nav-link {
+            color: #555;
+            font-weight: 600;
+        }
+        .nav-tabs .nav-link.active {
+            color: var(--primary-color) !important;
+            border-top: 3px solid var(--primary-color);
+        }
+        .section-title {
+            background-color: #e9ecef;
+            padding: 6px 12px;
+            font-weight: bold;
+            color: var(--primary-color);
+            border-left: 4px solid var(--secondary-color);
+            margin-top: 15px;
+            margin-bottom: 15px;
+        }
+        .btn-mirin-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        .btn-mirin-primary:hover {
+            background-color: #000050;
+            color: white;
+        }
+        .status-badge {
+            font-size: 0.85rem;
+            padding: 5px 10px;
+            border-radius: 12px;
+        }
+
+        #access-denied, #main-content {
+            display: none;
+        }
+
+        .arquivo-atual-box {
+            background: #eef2ff;
+            border: 1px dashed var(--primary-color);
+            border-radius: 8px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="carregando" style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:#666;">Carregando...</div>
+
+    <div class="container my-4">
+
+        <a href="../index.html" style="display:inline-block;margin-bottom:12px;color:#000080;font-size:13px;text-decoration:none;">&larr; Voltar à Central de Qualidade</a>
+
+        <div class="header-container" id="app-header" style="display: none;">
+            <div class="logo-box">
+                <img src="https://mirindosul.com.br/wp-content/themes/estrutura-basica/assets/images/logo.png" alt="Viação Mirim Logo">
+            </div>
+            <div class="header">
+                <h1 id="titulo-dinamico-cabecalho">Aprovação de Documentos</h1>
+            </div>
+            <div class="header-right-panel">
+                <div class="iso-info-card">
+                    <div class="iso-field-group">
+                        <span>Elaboração</span>
+                        <input type="text" id="iso-elaboracao" class="iso-editable" placeholder="Data..." readonly>
+                    </div>
+                    <div class="iso-field-group">
+                        <span>Revisão</span>
+                        <input type="text" id="iso-revisao" class="iso-editable" placeholder="Data..." readonly>
+                    </div>
+                    <div class="iso-field-group">
+                        <span>Nº Rev.</span>
+                        <input type="text" id="iso-num-revisao" class="iso-editable" style="width:40px; text-align:center;" placeholder="00" readonly>
+                    </div>
+                </div>
+                <div class="session-card">
+                    <span class="usuario-badge" id="user-display">---</span>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2 mt-1" id="btn-sair" style="font-size: 11px;"><i class="bi bi-power"></i> Sair</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="main-content">
+
+            <ul class="nav nav-tabs mb-4" id="moduleTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="cadastro-tab" data-bs-toggle="tab" data-bs-target="#cadastro-panel" type="button" role="tab"><i class="bi bi-file-earmark-plus-fill me-2"></i>Registro</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="controle-tab" data-bs-toggle="tab" data-bs-target="#controle-panel" type="button" role="tab"><i class="bi bi-table me-2"></i>Controle</button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="moduleTabsContent">
+
+                <div class="tab-pane fade show active" id="cadastro-panel" role="tabpanel">
+                    <form id="form-documento" class="card shadow-sm">
+                        <input type="hidden" id="doc-id">
+                        <input type="hidden" id="status_documento" value="Pendente">
+
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-2">
+                                    <label class="form-label font-monospace">Nº Registro</label>
+                                    <input type="text" id="num_registro" class="form-control text-center fw-bold text-primary font-monospace" placeholder="Automático" readonly>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Código do Documento</label>
+                                    <input type="text" id="codigo_documento" class="form-control" placeholder="Ex: PO-01, IT-05" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Título do Documento</label>
+                                    <input type="text" id="titulo_documento" class="form-control" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Versão / Revisão</label>
+                                    <input type="text" id="versao_revisao" class="form-control" placeholder="Ex: 00, 01, 02" required>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-1">
+                                <div class="col-md-3">
+                                    <label class="form-label">Tipo de Documento</label>
+                                    <select id="tipo_documento" class="form-select" required>
+                                        <option value="Política">Política</option>
+                                        <option value="Manual">Manual</option>
+                                        <option value="Procedimento">Procedimento</option>
+                                        <option value="Instrução de Trabalho">Instrução de Trabalho</option>
+                                        <option value="Formulário/Registro">Formulário/Registro</option>
+                                        <option value="Plano">Plano</option>
+                                        <option value="Outro">Outro</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Processo Relacionado</label>
+                                    <select id="processo" class="form-select" required>
+                                        <option value="Operação">Operação</option>
+                                        <option value="Qualidade">Qualidade</option>
+                                        <option value="Comercial">Comercial</option>
+                                        <option value="Financeiro/Adm">Financeiro/Adm</option>
+                                        <option value="TI">TI</option>
+                                        <option value="Gestão de Frota/Compras">Gestão de Frota/Compras</option>
+                                        <option value="RH">RH</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Data de Elaboração</label>
+                                    <input type="date" id="data_elaboracao" class="form-control" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Elaborado por</label>
+                                    <input type="text" id="elaborado_por" class="form-control" required>
+                                </div>
+                            </div>
+
+                            <div class="section-title">DESCRIÇÃO / MOTIVO DA EMISSÃO OU REVISÃO</div>
+                            <div class="mb-3">
+                                <textarea id="descricao_motivo" class="form-control" rows="3" placeholder="Detalhe o motivo da emissão ou o que mudou nesta revisão..." required></textarea>
+                            </div>
+
+                            <div class="section-title">STATUS DA APROVAÇÃO</div>
+                            <div class="row g-3 bg-white p-3 rounded border">
+                                <div class="col-md-4">
+                                    <label class="form-label">Situação Atual</label>
+                                    <div><span class="status-badge bg-warning text-dark" id="badge-status-form">Pendente</span></div>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Aprovado/Reprovado por</label>
+                                    <input type="text" id="aprovado_por" class="form-control" readonly>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Data da Decisão</label>
+                                    <input type="text" id="data_aprovacao" class="form-control" readonly>
+                                </div>
+                                <div class="col-md-12">
+                                    <label class="form-label">Parecer do Aprovador</label>
+                                    <input type="text" id="parecer_aprovador" class="form-control" readonly>
+                                </div>
+                            </div>
+
+                        </div>
+                        <div class="card-footer d-flex justify-content-between">
+                            <div>
+                                <button type="button" class="btn btn-outline-secondary me-2" id="btn-limpar"><i class="bi bi-eraser-fill me-2"></i>Limpar / Novo</button>
+                                <button type="button" class="btn btn-outline-danger" id="btn-excluir-form" style="display: none;"><i class="bi bi-trash-fill me-2"></i>Excluir Registro</button>
+                            </div>
+                            <button type="submit" class="btn btn-mirin-primary px-5"><i class="bi bi-cloud-check-fill me-2"></i>Salvar Registro no Firebase</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="tab-pane fade" id="controle-panel" role="tabpanel">
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <div class="row mb-3 g-2">
+                                <div class="col-md-6">
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                        <input type="text" id="txt-busca" class="form-control" placeholder="Buscar por código, título ou responsável...">
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <select id="filtro-tipo" class="form-select">
+                                        <option value="">Todos os Tipos</option>
+                                        <option value="Política">Política</option>
+                                        <option value="Manual">Manual</option>
+                                        <option value="Procedimento">Procedimento</option>
+                                        <option value="Instrução de Trabalho">Instrução de Trabalho</option>
+                                        <option value="Formulário/Registro">Formulário/Registro</option>
+                                        <option value="Plano">Plano</option>
+                                        <option value="Outro">Outro</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <select id="filtro-status" class="form-select">
+                                        <option value="">Todos os Status</option>
+                                        <option value="Pendente">Pendente</option>
+                                        <option value="Aprovado">Aprovado</option>
+                                        <option value="Reprovado">Reprovado</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle table-striped border">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 6%;">Nº</th>
+                                            <th style="width: 10%;">Código</th>
+                                            <th>Título</th>
+                                            <th style="width: 12%;">Tipo</th>
+                                            <th style="width: 8%;">Versão</th>
+                                            <th style="width: 10%;">Status</th>
+                                            <th style="width: 18%; text-align: center;">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabela-controle-corpo">
+                                    </tbody>
+                                </table>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { auth, db } from '../firebase-config.js';
+        import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+        import { doc, getDoc, setDoc, updateDoc, collection, query, getDocs, orderBy, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        // Upload de arquivo (Firebase Storage) desativado por enquanto — exige plano pago (Blaze).
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        }
+
+        let documentosCarregados = [];
+        let usuarioUnidade = "";
+
+        document.getElementById('btn-sair').addEventListener('click', () => signOut(auth));
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                window.location.href = '../index.html';
+                return;
+            }
+
+            const perfilSnap = await getDoc(doc(db, 'usuarios_perfil', user.uid));
+            const perfil = perfilSnap.exists() ? perfilSnap.data() : null;
+
+            if (!perfil || perfil.papel !== 'qualidade') {
+                alert('Este módulo é exclusivo para a equipe da qualidade.');
+                window.location.href = '../index.html';
+                return;
+            }
+
+            usuarioUnidade = perfil.unidade;
+            document.getElementById('user-display').innerText = usuarioUnidade;
+
+            document.getElementById('carregando').style.display = 'none';
+            document.getElementById('app-header').style.display = 'flex';
+            document.getElementById('main-content').style.display = 'block';
+
+            document.querySelectorAll('.iso-editable').forEach(el => el.removeAttribute('readonly'));
+
+            definirDataDeHoje();
+            inicializarEscutaISO();
+            carregarPainelControle();
+        });
+
+        function definirDataDeHoje() {
+            document.getElementById('data_elaboracao').value = new Date().toISOString().split('T')[0];
+        }
+
+        function inicializarEscutaISO() {
+            onSnapshot(doc(db, "configuracoes", "iso_aprovacao_documentos"), (docSnap) => {
+                if (docSnap.exists()) {
+                    const d = docSnap.data();
+                    document.getElementById('iso-elaboracao').value = d.elaboracao || '';
+                    document.getElementById('iso-revisao').value = d.revisao || '';
+                    document.getElementById('iso-num-revisao').value = d.numRevisao || '';
+                } else {
+                    document.getElementById('iso-elaboracao').value = '';
+                    document.getElementById('iso-revisao').value = '';
+                    document.getElementById('iso-num-revisao').value = '';
+                }
+            });
+        }
+
+        ['iso-elaboracao', 'iso-revisao', 'iso-num-revisao'].forEach(id => {
+            document.getElementById(id).addEventListener('change', () => {
+                setDoc(doc(db, "configuracoes", "iso_aprovacao_documentos"), {
+                    elaboracao: document.getElementById('iso-elaboracao').value,
+                    revisao: document.getElementById('iso-revisao').value,
+                    numRevisao: document.getElementById('iso-num-revisao').value
+                });
+            });
+        });
+
+        async function gerarProximoNumeroSequencial() {
+            try {
+                const q = query(collection(db, "documentos_aprovacao"), orderBy("num_registro", "desc"));
+                const snap = await getDocs(q);
+                if (snap.empty) {
+                    return "001";
+                } else {
+                    let maiorNum = 0;
+                    snap.forEach(docSnap => {
+                        const numInt = parseInt(docSnap.data().num_registro, 10);
+                        if (!isNaN(numInt) && numInt > maiorNum) maiorNum = numInt;
+                    });
+                    return String(maiorNum + 1).padStart(3, '0');
+                }
+            } catch (error) {
+                console.error("Erro ao calcular próximo número: ", error);
+                return "001";
+            }
+        }
+
+        function badgeClassePorStatus(status) {
+            if (status === "Aprovado") return "bg-success text-white";
+            if (status === "Reprovado") return "bg-danger text-white";
+            return "bg-warning text-dark";
+        }
+
+        function atualizarBadgeFormulario(status) {
+            const badge = document.getElementById('badge-status-form');
+            badge.innerText = status;
+            badge.className = "status-badge " + badgeClassePorStatus(status);
+        }
+
+        document.getElementById('form-documento').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            let id = document.getElementById('doc-id').value;
+            let numSeq = document.getElementById('num_registro').value;
+
+            if (!id) {
+                id = "DOC-" + Date.now();
+                numSeq = await gerarProximoNumeroSequencial();
+            }
+
+            const dados = {
+                id, num_registro: numSeq,
+                codigo_documento: document.getElementById('codigo_documento').value,
+                titulo_documento: document.getElementById('titulo_documento').value,
+                versao_revisao: document.getElementById('versao_revisao').value,
+                tipo_documento: document.getElementById('tipo_documento').value,
+                processo: document.getElementById('processo').value,
+                data_elaboracao: document.getElementById('data_elaboracao').value,
+                elaborado_por: document.getElementById('elaborado_por').value,
+                descricao_motivo: document.getElementById('descricao_motivo').value,
+                status_documento: document.getElementById('status_documento').value || "Pendente",
+                aprovacao: {
+                    aprovado_por: document.getElementById('aprovado_por').value,
+                    data_aprovacao: document.getElementById('data_aprovacao').value,
+                    parecer: document.getElementById('parecer_aprovador').value
+                },
+                atualizado_em: new Date().toISOString()
+            };
+
+            try {
+                await setDoc(doc(db, "documentos_aprovacao", id), dados);
+                alert("Registro salvo com sucesso como Nº " + numSeq + "!");
+                limparFormulario();
+                carregarPainelControle();
+            } catch (error) {
+                console.error(error);
+                alert("Erro ao salvar! Verifique as regras de segurança.");
+            }
+        });
+
+        async function deletarRegistro(id, numRegistro) {
+            if (confirm(`Tem certeza absoluta que deseja excluir o documento de Registro Nº ${numRegistro || ''}? Esta operação não poderá ser desfeita.`)) {
+                try {
+                    await deleteDoc(doc(db, "documentos_aprovacao", id));
+                    alert("Documento excluído com sucesso!");
+                    limparFormulario();
+                    carregarPainelControle();
+                } catch (error) {
+                    console.error("Erro ao deletar:", error);
+                    alert("Erro ao tentar excluir o documento do Firestore.");
+                }
+            }
+        }
+
+        document.getElementById('btn-excluir-form').addEventListener('click', () => {
+            const currentId = document.getElementById('doc-id').value;
+            const currentNum = document.getElementById('num_registro').value;
+            if (currentId) deletarRegistro(currentId, currentNum);
+        });
+
+        async function aprovarDocumento(id) {
+            const nome = prompt("Nome de quem está aprovando este documento:", usuarioUnidade);
+            if (nome === null) return;
+            try {
+                await updateDoc(doc(db, "documentos_aprovacao", id), {
+                    status_documento: "Aprovado",
+                    aprovacao: {
+                        aprovado_por: nome,
+                        data_aprovacao: new Date().toISOString().split('T')[0],
+                        parecer: "Documento aprovado."
+                    },
+                    atualizado_em: new Date().toISOString()
+                });
+                carregarPainelControle();
+            } catch (error) {
+                console.error(error);
+                alert("Erro ao aprovar o documento.");
+            }
+        }
+
+        async function reprovarDocumento(id) {
+            const motivo = prompt("Motivo da reprovação:");
+            if (motivo === null) return;
+            try {
+                await updateDoc(doc(db, "documentos_aprovacao", id), {
+                    status_documento: "Reprovado",
+                    aprovacao: {
+                        aprovado_por: usuarioUnidade,
+                        data_aprovacao: new Date().toISOString().split('T')[0],
+                        parecer: motivo || "Documento reprovado."
+                    },
+                    atualizado_em: new Date().toISOString()
+                });
+                carregarPainelControle();
+            } catch (error) {
+                console.error(error);
+                alert("Erro ao reprovar o documento.");
+            }
+        }
+
+        async function carregarPainelControle() {
+            try {
+                const q = query(collection(db, "documentos_aprovacao"), orderBy("num_registro", "desc"));
+                const querySnapshot = await getDocs(q);
+                documentosCarregados = [];
+                querySnapshot.forEach(docSnap => documentosCarregados.push(docSnap.data()));
+                renderizarTabelaControle(documentosCarregados);
+            } catch (e) { console.error(e); }
+        }
+
+        function renderizarTabelaControle(dados) {
+            const corpo = document.getElementById('tabela-controle-corpo');
+            corpo.innerHTML = "";
+            dados.forEach(item => {
+                const bc = badgeClassePorStatus(item.status_documento);
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="font-monospace fw-bold text-primary">#${item.num_registro || '---'}</td>
+                    <td>${escapeHtml(item.codigo_documento || '')}</td>
+                    <td class="text-truncate" style="max-width: 260px;">${escapeHtml(item.titulo_documento || '')}</td>
+                    <td><span class="badge bg-secondary">${escapeHtml(item.tipo_documento || '')}</span></td>
+                    <td class="text-center">${escapeHtml(item.versao_revisao || '')}</td>
+                    <td><span class="status-badge ${bc}">${escapeHtml(item.status_documento || 'Pendente')}</span></td>
+                    <td class="text-center">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button class="btn btn-outline-primary btn-abrir" data-id="${item.id}" title="Abrir"><i class="bi bi-pencil-square"></i></button>
+                            <button class="btn btn-outline-success btn-aprovar" data-id="${item.id}" title="Aprovar"><i class="bi bi-check-lg"></i></button>
+                            <button class="btn btn-outline-warning btn-reprovar" data-id="${item.id}" title="Reprovar"><i class="bi bi-x-lg"></i></button>
+                            <button class="btn btn-outline-danger btn-excluir-tabela" data-id="${item.id}" data-num="${item.num_registro}" title="Excluir"><i class="bi bi-trash"></i></button>
+                        </div>
+                    </td>
+                `;
+                tr.querySelector('.btn-abrir').addEventListener('click', () => abrirParaEdicao(item.id));
+                tr.querySelector('.btn-aprovar').addEventListener('click', () => aprovarDocumento(item.id));
+                tr.querySelector('.btn-reprovar').addEventListener('click', () => reprovarDocumento(item.id));
+                tr.querySelector('.btn-excluir-tabela').addEventListener('click', (ev) => {
+                    const el = ev.currentTarget;
+                    deletarRegistro(el.dataset.id, el.dataset.num);
+                });
+                corpo.appendChild(tr);
+            });
+        }
+
+        function abrirParaEdicao(id) {
+            const item = documentosCarregados.find(d => d.id === id);
+            if (!item) return;
+
+            document.getElementById('doc-id').value = item.id;
+            document.getElementById('num_registro').value = item.num_registro || "";
+            document.getElementById('codigo_documento').value = item.codigo_documento || "";
+            document.getElementById('titulo_documento').value = item.titulo_documento || "";
+            document.getElementById('versao_revisao').value = item.versao_revisao || "";
+            document.getElementById('tipo_documento').value = item.tipo_documento || "Procedimento";
+            document.getElementById('processo').value = item.processo || "Operação";
+            document.getElementById('data_elaboracao').value = item.data_elaboracao || "";
+            document.getElementById('elaborado_por').value = item.elaborado_por || "";
+            document.getElementById('descricao_motivo').value = item.descricao_motivo || "";
+            document.getElementById('status_documento').value = item.status_documento || "Pendente";
+
+            atualizarBadgeFormulario(item.status_documento || "Pendente");
+            if (item.aprovacao) {
+                document.getElementById('aprovado_por').value = item.aprovacao.aprovado_por || "";
+                document.getElementById('data_aprovacao').value = item.aprovacao.data_aprovacao || "";
+                document.getElementById('parecer_aprovador').value = item.aprovacao.parecer || "";
+            }
+
+            document.getElementById('btn-excluir-form').style.display = 'inline-block';
+
+            const firstTab = new bootstrap.Tab(document.getElementById('cadastro-tab'));
+            firstTab.show();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function filtrarTabela() {
+            const termo = document.getElementById('txt-busca').value.toLowerCase();
+            const tipoFiltro = document.getElementById('filtro-tipo').value;
+            const statusFiltro = document.getElementById('filtro-status').value;
+
+            const filtrados = documentosCarregados.filter(item => {
+                const cod = (item.codigo_documento || '').toLowerCase();
+                const titulo = (item.titulo_documento || '').toLowerCase();
+                const resp = (item.elaborado_por || '').toLowerCase();
+
+                const atendeBusca = cod.includes(termo) || titulo.includes(termo) || resp.includes(termo);
+                const atendeTipo = !tipoFiltro || item.tipo_documento === tipoFiltro;
+                const atendeStatus = !statusFiltro || item.status_documento === statusFiltro;
+
+                return atendeBusca && atendeTipo && atendeStatus;
+            });
+
+            renderizarTabelaControle(filtrados);
+        }
+
+        document.getElementById('txt-busca').addEventListener('input', filtrarTabela);
+        document.getElementById('filtro-tipo').addEventListener('change', filtrarTabela);
+        document.getElementById('filtro-status').addEventListener('change', filtrarTabela);
+        document.getElementById('controle-tab').addEventListener('click', carregarPainelControle);
+
+        function limparFormulario() {
+            document.getElementById('form-documento').reset();
+            document.getElementById('doc-id').value = "";
+            document.getElementById('num_registro').value = "";
+            document.getElementById('status_documento').value = "Pendente";
+            document.getElementById('aprovado_por').value = "";
+            document.getElementById('data_aprovacao').value = "";
+            document.getElementById('parecer_aprovador').value = "";
+            atualizarBadgeFormulario("Pendente");
+            document.getElementById('btn-excluir-form').style.display = 'none';
+            definirDataDeHoje();
+        }
+
+        document.getElementById('btn-limpar').addEventListener('click', limparFormulario);
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

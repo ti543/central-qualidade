@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Central de Qualidade - Viação Mirim</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+<link href="./assets/layout.css" rel="stylesheet">
+<style>
+  /* Estilos específicos desta página (login + formulários de admin).
+     Tudo que é compartilhado com os módulos fica em assets/layout.css */
+
+  .form-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; align-items:end; }
+  .form-group { display:flex; flex-direction:column; }
+  .form-group label { font-size:12px; font-weight:500; margin-bottom:4px; color:#333; }
+  .form-group input, .form-group select { padding:8px 10px; border:1px solid #ccc; border-radius:4px; font-size:13px; font-family:inherit; }
+
+  .table-wrapper { overflow-x:auto; border:1px solid #ddd; border-radius:6px; background:white; }
+  table.admin { width:100%; border-collapse:collapse; font-size:13px; min-width:640px; }
+  table.admin th { background:#000080; padding:10px 8px; text-align:left; font-weight:600; color:white; white-space:nowrap; }
+  table.admin td { padding:8px; border-bottom:1px solid #eee; vertical-align:middle; }
+  table.admin input[type=text] { padding:5px 7px; border:1px solid #ccc; border-radius:4px; font-size:12px; width:110px; }
+  table.admin select { padding:5px; border:1px solid #ccc; border-radius:4px; font-size:12px; }
+  .chk-modulos { display:flex; gap:8px; flex-wrap:wrap; font-size:11px; }
+  .chk-modulos label { display:flex; align-items:center; gap:3px; white-space:nowrap; }
+  .secao-admin { margin-top:10px; }
+
+  .qc-home-tabs { display:flex; gap:8px; margin-bottom:18px; }
+  .qc-home-tab-btn { padding:9px 16px; border:1px solid #ddd; background:#fff; cursor:pointer; font-size:13px; font-weight:600; color:#555; border-radius:6px; transition:all .2s; }
+  .qc-home-tab-btn:hover { background:#f1f3f9; }
+  .qc-home-tab-btn.active { background:var(--qc-primary); color:#fff; border-color:var(--qc-primary); }
+  .qc-home-section { display:none; }
+  .qc-home-section.active { display:block; }
+</style>
+</head>
+<body class="qc-body">
+
+<div id="qc-login-screen">
+  <div class="qc-login-card">
+    <div class="qc-logo-container">
+      <img src="https://mirindosul.com.br/wp-content/themes/estrutura-basica/assets/images/logo.png" alt="Viação Mirim Logo">
+    </div>
+    <h2>Central de Qualidade</h2>
+    <input class="qc-login-input" type="email" id="login-email" placeholder="seu@email.com" autocomplete="username">
+    <input class="qc-login-input" type="password" id="login-senha" placeholder="Senha" autocomplete="current-password">
+    <button class="qc-login-btn" id="btn-login">Entrar</button>
+    <div class="qc-login-erro" id="login-erro"></div>
+  </div>
+</div>
+
+<div id="qc-page-content">
+
+  <div class="qc-home-tabs" id="qc-home-tabs">
+    <button class="qc-home-tab-btn active" data-aba="modulos"><i class="bi bi-grid-fill me-1"></i> Meus Módulos</button>
+    <button class="qc-home-tab-btn" id="aba-admin-btn" data-aba="admin" style="display:none;"><i class="bi bi-gear-fill me-1"></i> Administração</button>
+  </div>
+
+  <div class="qc-home-section active" id="secao-modulos">
+    <div id="lista-modulos" class="qc-modulos-grid"></div>
+  </div>
+
+  <div class="qc-home-section" id="secao-admin">
+
+    <div class="qc-card">
+      <h3>Módulos do sistema</h3>
+      <p class="qc-hint">Cada módulo aqui vira um item na sidebar e um card na tela "Meus Módulos", além de um arquivo HTML dentro de /modulos/. Cadastre o módulo aqui primeiro, depois publique o arquivo correspondente.</p>
+      <div class="form-row" style="grid-template-columns:1fr 2fr 2fr auto;">
+        <div class="form-group">
+          <label>Slug (nome do arquivo, sem espaço)</label>
+          <input type="text" id="novo-modulo-slug" placeholder="ex: rg35">
+        </div>
+        <div class="form-group">
+          <label>Nome exibido</label>
+          <input type="text" id="novo-modulo-nome" placeholder="ex: RG 35 — Auditorias Internas">
+        </div>
+        <div class="form-group">
+          <label>Descrição curta</label>
+          <input type="text" id="novo-modulo-descricao" placeholder="ex: Registro de auditorias internas.">
+        </div>
+        <div class="form-group">
+          <button class="qc-btn qc-btn-primary" id="btn-add-modulo">Adicionar módulo</button>
+        </div>
+      </div>
+      <div class="table-wrapper secao-admin">
+        <table class="admin">
+          <thead><tr><th>Slug</th><th>Nome</th><th>Descrição</th><th>Ações</th></tr></thead>
+          <tbody id="tabela-modulos"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="qc-card">
+      <h3>Vincular acesso de um usuário novo</h3>
+      <p class="qc-hint">Primeiro crie o login em Firebase Console &gt; Authentication &gt; Add user. Depois cole o UID dele aqui (aparece na mesma tela, com um ícone de copiar) e escolha os módulos.</p>
+      <div class="form-row" style="grid-template-columns:2fr 1fr 1fr 1fr auto;">
+        <div class="form-group">
+          <label>UID do usuário</label>
+          <input type="text" id="novo-uid" placeholder="cole o UID do Authentication">
+        </div>
+        <div class="form-group">
+          <label>E-mail (só pra referência)</label>
+          <input type="text" id="novo-uid-email" placeholder="nome@mirindosul.com.br">
+        </div>
+        <div class="form-group">
+          <label>Unidade</label>
+          <select id="novo-uid-unidade"></select>
+        </div>
+        <div class="form-group">
+          <label>Papel</label>
+          <select id="novo-uid-papel">
+            <option value="filial">Administrativo (você escolhe os módulos)</option>
+            <option value="qualidade">Master (acesso total)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <button class="qc-btn qc-btn-primary" id="btn-vincular-uid">Vincular</button>
+        </div>
+      </div>
+      <div class="chk-modulos secao-admin" id="chk-modulos-novo"></div>
+    </div>
+
+    <div class="qc-card">
+      <h3>Usuários com acesso</h3>
+      <p class="qc-hint">Marque os módulos liberados para cada um e clique em Salvar na linha.</p>
+      <div class="table-wrapper">
+        <table class="admin">
+          <thead><tr><th>E-mail</th><th>Unidade</th><th>Papel</th><th>Módulos liberados</th><th>Ações</th></tr></thead>
+          <tbody id="tabela-usuarios"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+  import { auth, db } from './firebase-config.js';
+  import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { exibirShell, garantirEsqueleto, escapeHtml } from './assets/layout.js';
+
+  garantirEsqueleto({ homeHref: './index.html' });
+
+  let perfilAtual = null;
+  let modulosCache = [];
+
+  const UNIDADES_PADRAO = ['CMP', 'RSL', 'GRU', 'POA', 'CTB', 'ITJ', 'MTZ'];
+
+  function opcoesUnidade(selecionada) {
+    return UNIDADES_PADRAO.map(u => `<option value="${u}" ${u === selecionada ? 'selected' : ''}>${u}</option>`).join('');
+  }
+
+  document.getElementById('novo-uid-unidade').innerHTML = opcoesUnidade();
+
+  function extrairUnidadeEmail(email) {
+    const prefixo = (email || '').split('@')[0].toUpperCase();
+    return prefixo || '---';
+  }
+
+  function papelPadraoPorEmail(email) {
+    const prefixo = (email || '').split('@')[0].toLowerCase();
+    return (prefixo === 'qualidade' || prefixo === 'matriz') ? 'qualidade' : 'filial';
+  }
+
+  function souQualidade() {
+    return perfilAtual && perfilAtual.papel === 'qualidade';
+  }
+
+  // -------------------------------------------------------------------
+  // LOGIN
+  // -------------------------------------------------------------------
+  document.getElementById('btn-login').addEventListener('click', fazerLogin);
+  document.getElementById('login-senha').addEventListener('keydown', e => { if (e.key === 'Enter') fazerLogin(); });
+
+  async function fazerLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const senha = document.getElementById('login-senha').value.trim();
+    const erroDiv = document.getElementById('login-erro');
+    erroDiv.style.display = 'none';
+
+    if (!email || !senha) {
+      erroDiv.textContent = 'Preencha todos os campos.';
+      erroDiv.style.display = 'block';
+      return;
+    }
+
+    const btn = document.getElementById('btn-login');
+    btn.disabled = true;
+    btn.textContent = 'Entrando...';
+    try {
+      await signInWithEmailAndPassword(auth, email, senha);
+    } catch (err) {
+      erroDiv.textContent = 'E-mail ou senha incorretos.';
+      erroDiv.style.display = 'block';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Entrar';
+  }
+
+  onAuthStateChanged(auth, async (user) => {
+    const telaLogin = document.getElementById('qc-login-screen');
+    if (user) {
+      telaLogin.style.display = 'none';
+      await carregarOuCriarPerfil(user);
+      await carregarModulos();
+
+      exibirShell({
+        db,
+        perfil: perfilAtual,
+        modulos: modulosCache,
+        activeSlug: null,
+        pageTitle: 'Central da Qualidade',
+        breadcrumb: 'Início',
+        homeHref: './index.html'
+      });
+      document.getElementById('qc-btn-sair').addEventListener('click', () => signOut(auth));
+
+      document.getElementById('aba-admin-btn').style.display = souQualidade() ? 'inline-block' : 'none';
+      renderizarListaModulos();
+      if (window.location.hash === '#admin' && souQualidade()) ativarAba('admin');
+    } else {
+      document.getElementById('qc-loading').style.display = 'none';
+      telaLogin.style.display = 'flex';
+      perfilAtual = null;
+    }
+  });
+
+  async function carregarOuCriarPerfil(user) {
+    const ref = doc(db, 'usuarios_perfil', user.uid);
+    let snap = await getDoc(ref);
+    if (!snap.exists()) {
+      await setDoc(ref, {
+        email: user.email,
+        unidade: extrairUnidadeEmail(user.email),
+        papel: papelPadraoPorEmail(user.email),
+        modulosPermitidos: []
+      });
+      snap = await getDoc(ref);
+    }
+    perfilAtual = snap.data();
+  }
+
+  // -------------------------------------------------------------------
+  // NAVEGAÇÃO (abas internas da home: Meus Módulos / Administração)
+  // -------------------------------------------------------------------
+  function ativarAba(aba) {
+    document.querySelectorAll('.qc-home-section').forEach(tc => tc.classList.remove('active'));
+    document.querySelectorAll('.qc-home-tab-btn').forEach(tb => tb.classList.remove('active'));
+    document.getElementById('secao-' + aba).classList.add('active');
+    document.querySelector(`.qc-home-tab-btn[data-aba="${aba}"]`).classList.add('active');
+    if (aba === 'admin' && souQualidade()) carregarAdmin();
+  }
+
+  document.querySelectorAll('.qc-home-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => { window.location.hash = btn.dataset.aba === 'admin' ? '#admin' : ''; ativarAba(btn.dataset.aba); });
+  });
+
+  window.addEventListener('hashchange', () => {
+    if (!perfilAtual) return;
+    ativarAba(window.location.hash === '#admin' && souQualidade() ? 'admin' : 'modulos');
+  });
+
+  // -------------------------------------------------------------------
+  // CARDS DE MÓDULOS
+  // -------------------------------------------------------------------
+  async function carregarModulos() {
+    const snap = await getDocs(query(collection(db, 'modulos'), orderBy('ordem')));
+    modulosCache = snap.docs.map(d => ({ slug: d.id, ...d.data() }));
+  }
+
+  function renderizarListaModulos() {
+    const permitidos = modulosCache.filter(m => souQualidade() || (perfilAtual.modulosPermitidos || []).includes(m.slug));
+    const container = document.getElementById('lista-modulos');
+
+    if (permitidos.length === 0) {
+      container.innerHTML = `<div class="qc-aviso-vazio">Nenhum módulo liberado para o seu usuário ainda. Contate a qualidade.</div>`;
+      return;
+    }
+
+    container.innerHTML = permitidos.map(m => `
+      <a class="qc-modulo-card" href="modulos/${escapeHtml(m.slug)}.html">
+        <h3>${escapeHtml(m.nome)}</h3>
+        <p>${escapeHtml(m.descricao || '')}</p>
+        <span class="qc-ir">Acessar &rarr;</span>
+      </a>
+    `).join('');
+  }
+
+  // -------------------------------------------------------------------
+  // ADMINISTRAÇÃO — só carrega quando papel = qualidade
+  // -------------------------------------------------------------------
+  document.getElementById('btn-add-modulo').addEventListener('click', async () => {
+    const slug = document.getElementById('novo-modulo-slug').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+    const nome = document.getElementById('novo-modulo-nome').value.trim();
+    const descricao = document.getElementById('novo-modulo-descricao').value.trim();
+    if (!slug || !nome) { alert('Preencha ao menos o slug e o nome do módulo.'); return; }
+
+    await setDoc(doc(db, 'modulos', slug), { nome, descricao, ordem: modulosCache.length + 1 });
+    document.getElementById('novo-modulo-slug').value = '';
+    document.getElementById('novo-modulo-nome').value = '';
+    document.getElementById('novo-modulo-descricao').value = '';
+    await carregarModulos();
+    renderizarListaModulos();
+    await carregarAdmin();
+  });
+
+  document.getElementById('btn-vincular-uid').addEventListener('click', async () => {
+    const uid = document.getElementById('novo-uid').value.trim();
+    const email = document.getElementById('novo-uid-email').value.trim();
+    const unidade = document.getElementById('novo-uid-unidade').value.trim().toUpperCase();
+    const papel = document.getElementById('novo-uid-papel').value;
+    const modulosMarcados = Array.from(document.querySelectorAll('#chk-modulos-novo input[type=checkbox]:checked')).map(c => c.value);
+
+    if (!uid || !unidade) { alert('Preencha ao menos o UID e a unidade.'); return; }
+
+    try {
+      await setDoc(doc(db, 'usuarios_perfil', uid), {
+        email: email || '',
+        unidade,
+        papel,
+        modulosPermitidos: modulosMarcados
+      });
+      alert('Usuário vinculado com sucesso!');
+      document.getElementById('novo-uid').value = '';
+      document.getElementById('novo-uid-email').value = '';
+      document.getElementById('novo-uid-unidade').value = '';
+      await carregarAdmin();
+    } catch (err) {
+      alert('Erro ao vincular: ' + err.message);
+    }
+  });
+
+  async function carregarAdmin() {
+    renderizarTabelaModulos();
+    renderizarChecklistNovoUsuario();
+    await renderizarTabelaUsuarios();
+  }
+
+  function renderizarTabelaModulos() {
+    const tbody = document.getElementById('tabela-modulos');
+    tbody.innerHTML = modulosCache.map(m => `
+      <tr>
+        <td><code>${escapeHtml(m.slug)}</code></td>
+        <td>${escapeHtml(m.nome)}</td>
+        <td>${escapeHtml(m.descricao || '')}</td>
+        <td><button class="qc-btn qc-btn-danger" data-remover-modulo="${escapeHtml(m.slug)}">Remover</button></td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-remover-modulo]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const slug = btn.dataset.removerModulo;
+        if (!confirm(`Remover o módulo "${slug}" do catálogo? Isso NÃO apaga os dados já registrados nele, só tira o item da sidebar e o card da tela inicial.`)) return;
+        await deleteDoc(doc(db, 'modulos', slug));
+        await carregarModulos();
+        renderizarListaModulos();
+        await carregarAdmin();
+      });
+    });
+  }
+
+  function renderizarChecklistNovoUsuario() {
+    const container = document.getElementById('chk-modulos-novo');
+    container.innerHTML = modulosCache.map(m => `
+      <label><input type="checkbox" value="${escapeHtml(m.slug)}"> ${escapeHtml(m.nome)}</label>
+    `).join('');
+  }
+
+  async function renderizarTabelaUsuarios() {
+    const snap = await getDocs(collection(db, 'usuarios_perfil'));
+    const usuarios = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+    const tbody = document.getElementById('tabela-usuarios');
+
+    tbody.innerHTML = usuarios.map(u => `
+      <tr data-uid="${escapeHtml(u.uid)}">
+        <td>${escapeHtml(u.email || '(sem e-mail salvo)')}</td>
+        <td><select class="campo-unidade">${opcoesUnidade(u.unidade)}</select></td>
+        <td>
+          <select class="campo-papel">
+            <option value="filial" ${u.papel === 'filial' ? 'selected' : ''}>Administrativo</option>
+            <option value="qualidade" ${u.papel === 'qualidade' ? 'selected' : ''}>Master</option>
+          </select>
+        </td>
+        <td>
+          <div class="chk-modulos">
+            ${modulosCache.map(m => `
+              <label>
+                <input type="checkbox" class="campo-modulo" value="${escapeHtml(m.slug)}" ${(u.modulosPermitidos || []).includes(m.slug) ? 'checked' : ''}>
+                ${escapeHtml(m.slug)}
+              </label>
+            `).join('')}
+          </div>
+        </td>
+        <td style="white-space:nowrap;">
+          <button class="qc-btn qc-btn-primary" data-salvar-uid="${escapeHtml(u.uid)}">Salvar</button>
+          <button class="qc-btn qc-btn-danger" data-remover-uid="${escapeHtml(u.uid)}">Remover acesso</button>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-salvar-uid]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const tr = btn.closest('tr');
+        const uid = btn.dataset.salvarUid;
+        const unidade = tr.querySelector('.campo-unidade').value.trim().toUpperCase();
+        const papel = tr.querySelector('.campo-papel').value;
+        const modulosMarcados = Array.from(tr.querySelectorAll('.campo-modulo:checked')).map(c => c.value);
+        await updateDoc(doc(db, 'usuarios_perfil', uid), { unidade, papel, modulosPermitidos: modulosMarcados });
+        alert('Salvo!');
+      });
+    });
+
+    tbody.querySelectorAll('[data-remover-uid]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const uid = btn.dataset.removerUid;
+        if (!confirm('Remover o acesso deste usuário? O login continua existindo no Authentication, isso só apaga as permissões dele aqui.')) return;
+        await deleteDoc(doc(db, 'usuarios_perfil', uid));
+        await renderizarTabelaUsuarios();
+      });
+    });
+  }
+</script>
+</body>
+</html>

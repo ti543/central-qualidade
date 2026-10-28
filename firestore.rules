@@ -1,0 +1,186 @@
+rules_version = "2";
+
+// ============================================================================
+// REGRAS DO FIRESTORE — Central de Qualidade
+// Cole isto em: Firebase Console > Firestore Database > Regras > Publicar.
+//
+// Modelo:
+//  - usuarios_perfil/{uid}: papel ("filial" | "qualidade"), unidade, modulosPermitidos (array de slugs)
+//  - modulos/{slug}: catálogo de módulos (nome, descricao, ordem)
+//  - modulos/{slug}/parametros/{id}: unidades causadoras / resumos de cada módulo
+//  - modulo_config/{slug}: cabeçalho ISO de cada módulo
+//  - contadores/{slug}: contador do número sequencial de cada módulo
+//  - rg21_ocorrencias/{id}, rg29_ocorrencias/{id}: dados de cada módulo
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() {
+      return request.auth != null;
+    }
+
+    function perfil() {
+      return get(/databases/$(database)/documents/usuarios_perfil/$(request.auth.uid)).data;
+    }
+
+    function souQualidade() {
+      return logado() &&
+        exists(/databases/$(database)/documents/usuarios_perfil/$(request.auth.uid)) &&
+        perfil().papel == "qualidade";
+    }
+
+    function minhaUnidade() {
+      return perfil().unidade;
+    }
+
+    function temPermissao(slug) {
+      return souQualidade() || (slug in perfil().modulosPermitidos);
+    }
+
+    // MTZ enxerga os dados de todas as unidades (mas não vira Master:
+    // continua restrito aos módulos liberados e não pode excluir).
+    function vejoTudo() {
+      return souQualidade() || minhaUnidade() == "MTZ";
+    }
+
+    // Usado pra impedir que quem não é Master crie/edite o vínculo com
+    // uma ação corretiva (RG34/35) numa ocorrência.
+    function semCamposDeAcao(dados) {
+      return !("acaoCorretivaId" in dados)
+        && !("acaoCorretivaNumero" in dados)
+        && !("acaoCorretivaDescricao" in dados);
+    }
+
+    // ------------------------------------------------------------------
+    // PERFIS DE USUÁRIO
+    // ------------------------------------------------------------------
+    match /usuarios_perfil/{uid} {
+      allow get: if logado() && (request.auth.uid == uid || souQualidade());
+      allow list: if souQualidade();
+
+      // Autoprovisionamento seguro: o próprio usuário só pode criar o
+      // perfil dele sem nenhum módulo liberado, e só vira "qualidade"
+      // se o e-mail (verificado pelo próprio Firebase Auth) começar com
+      // qualidade@ ou matriz@ — o resto sempre nasce como "filial".
+      // Qualidade pode criar/editar perfil de qualquer um, com qualquer valor.
+      allow create: if logado() && (
+        (request.auth.uid == uid
+          && request.resource.data.modulosPermitidos.size() == 0
+          && (
+            request.resource.data.papel == "filial"
+            || (request.resource.data.papel == "qualidade"
+                && request.auth.token.email.matches("(?i)^(qualidade|matriz)@.*"))
+          )
+        )
+        || souQualidade()
+      );
+      allow update, delete: if souQualidade();
+    }
+
+    // ------------------------------------------------------------------
+    // CATÁLOGO DE MÓDULOS
+    // ------------------------------------------------------------------
+    match /modulos/{slug} {
+      allow read: if logado();
+      allow write: if souQualidade();
+
+      match /parametros/{paramId} {
+        allow read: if temPermissao(slug);
+        allow write: if souQualidade();
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // CABEÇALHO ISO POR MÓDULO
+    // ------------------------------------------------------------------
+    match /modulo_config/{slug} {
+      allow read: if temPermissao(slug);
+      allow write: if souQualidade();
+    }
+
+    // ------------------------------------------------------------------
+    // CONTADOR DE NÚMERO SEQUENCIAL POR MÓDULO
+    // ------------------------------------------------------------------
+    match /contadores/{slug} {
+      allow read, write: if temPermissao(slug);
+    }
+
+    // ------------------------------------------------------------------
+    // RG21 — OCORRÊNCIAS
+    // ------------------------------------------------------------------
+    match /rg21_ocorrencias/{id} {
+      allow read: if temPermissao("rg21") &&
+        (vejoTudo() || resource.data.unidadeRegistrou == minhaUnidade());
+      allow create: if temPermissao("rg21") &&
+        request.resource.data.unidadeRegistrou == minhaUnidade() &&
+        (souQualidade() || semCamposDeAcao(request.resource.data));
+      allow update: if temPermissao("rg21") &&
+        (
+          souQualidade()
+          || (
+            (vejoTudo() || resource.data.unidadeRegistrou == minhaUnidade())
+            && !request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(["acaoCorretivaId", "acaoCorretivaNumero", "acaoCorretivaDescricao"])
+          )
+        );
+      allow delete: if temPermissao("rg21") && souQualidade();
+    }
+
+    // ------------------------------------------------------------------
+    // RG29 — OCORRÊNCIAS
+    // ------------------------------------------------------------------
+    match /rg29_ocorrencias/{id} {
+      allow read: if temPermissao("rg29") &&
+        (vejoTudo() || resource.data.unidadeRegistrou == minhaUnidade());
+      allow create: if temPermissao("rg29") &&
+        request.resource.data.unidadeRegistrou == minhaUnidade() &&
+        (souQualidade() || semCamposDeAcao(request.resource.data));
+      allow update: if temPermissao("rg29") &&
+        (
+          souQualidade()
+          || (
+            (vejoTudo() || resource.data.unidadeRegistrou == minhaUnidade())
+            && !request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(["acaoCorretivaId", "acaoCorretivaNumero", "acaoCorretivaDescricao"])
+          )
+        );
+      allow delete: if temPermissao("rg29") && souQualidade();
+    }
+
+    // ------------------------------------------------------------------
+    // RG34/RG35 — AÇÕES CORRETIVAS/PREVENTIVAS (exclusivo qualidade)
+    // ------------------------------------------------------------------
+    match /acoes_qualidade/{id} {
+      allow read, write: if souQualidade();
+    }
+
+    // ------------------------------------------------------------------
+    // APROVAÇÃO DE DOCUMENTOS (exclusivo qualidade)
+    // ------------------------------------------------------------------
+    match /documentos_aprovacao/{id} {
+      allow read, write: if souQualidade();
+    }
+
+    // Cabeçalhos ISO do RG34/RG35 e da Aprovação de Documentos (mesma coleção,
+    // docs diferentes: iso_rg34, iso_rg35, iso_aprovacao_documentos)
+    match /configuracoes/{id} {
+      allow read, write: if souQualidade();
+    }
+
+    // ------------------------------------------------------------------
+    // RG22 — CONTROLE DE COMPETÊNCIAS (exclusivo qualidade)
+    // ------------------------------------------------------------------
+    match /rg22_competencias/{id} {
+      allow read, write: if souQualidade();
+    }
+
+    // ------------------------------------------------------------------
+    // RG06 — INDICADORES (leitura pra quem tem o módulo liberado, escrita só qualidade)
+    // ------------------------------------------------------------------
+    match /indicadores_rg06/{id} {
+      allow read: if temPermissao("indicadores");
+      allow write: if souQualidade();
+    }
+  }
+}

@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RG 29 - Controle de Ocorrências</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <link href="../assets/layout.css" rel="stylesheet">
+  <style>
+    /* Estilos específicos deste módulo (abas internas, formulário, tabela,
+       dashboard). Sidebar/topbar/cards/botões padrão vêm de assets/layout.css. */
+
+    .container { max-width: 1200px; margin: 0 auto; padding: 0; }
+
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; overflow-x: auto; }
+    .tab-btn { padding: 10px 18px; border: 1px solid #ddd; background: #fff; cursor: pointer; font-size: 13.5px; font-weight: 600; color: #555; border-radius: 6px; transition: all 0.2s; white-space: nowrap; }
+    .tab-btn:hover { background: #f1f3f9; }
+    .tab-btn.active { background: var(--qc-primary); color: #fff; border-color: var(--qc-primary); }
+
+    .tab-qualidade { display: none; border-color: #f0ad4e; color: #d47a00; }
+    .tab-qualidade.active { background: #d47a00; color: #fff; border-color: #d47a00; }
+
+    .form-card { background: #fff; border: 0.5px solid #ccc; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .form-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #000080; }
+    .form-section { margin-bottom: 20px; padding-bottom: 20px; border-bottom: 0.5px solid #ddd; }
+    .form-section:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+
+    .form-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .form-row.col3 { grid-template-columns: repeat(3, 1fr); }
+    .form-row.col4 { grid-template-columns: repeat(4, 1fr); }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group label { font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #333; }
+    .form-group label .required { color: red; }
+    .form-group input, .form-group select, .form-group textarea { padding: 8px 12px; border: 0.5px solid #ccc; border-radius: 4px; font-size: 14px; font-family: inherit; }
+    .form-group textarea { resize: vertical; min-height: 60px; }
+
+    .cte-inline-group { display: flex; align-items: center; gap: 5px; width: 100%; }
+    .cte-sigla { width: 75px !important; text-align: center; text-transform: uppercase; }
+    .cte-numero { flex: 1; }
+    .cte-digito { width: 45px !important; text-align: center; }
+
+    .btn-toggle-cte { background: #f0f1f7; border: 1px dashed #000080; color: #000080; font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 4px; cursor: pointer; margin-top: 5px; align-self: flex-start; transition: all 0.2s; }
+    .btn-toggle-cte.active { background: #dc3545; border-color: #dc3545; color: white; }
+
+    .char-hint { font-size: 11px; color: #777; margin-top: 4px; text-align: right; }
+
+    .table-wrapper { overflow-x: auto; max-width: 100%; border: 1px solid #ddd; border-radius: 6px; background: white; margin-top: 10px; }
+    .table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 1300px; }
+    .table th { background: #000080; padding: 12px 10px; text-align: left; font-weight: 600; color: white; white-space: nowrap; }
+    .table td { padding: 12px 10px; border-bottom: 1px solid #eee; vertical-align: middle; white-space: nowrap; color: #444; }
+    .table tr:hover { background: #f1f5f9; }
+
+    .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(48%, 1fr)); gap: 20px; margin-top: 15px; }
+    .chart-box-full { grid-column: span 2; }
+    @media (max-width: 768px) { .dashboard-grid { grid-template-columns: 1fr; } .chart-box-full { grid-column: span 1; } }
+    .chart-box { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+    .chart-container { position: relative; height: 260px; width: 100%; }
+    .chart-container-large { position: relative; height: 350px; width: 100%; }
+
+    .filter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; margin-bottom: 20px; background: #fdfdfd; padding: 15px; border-radius: 6px; border: 1px dashed #000080; }
+
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+    .badge-aberta { background: #fff3cd; color: #856404; }
+    .badge-fechada { background: #d4edda; color: #155724; }
+    .badge-sim { background: #e2f0d9; color: #385723; }
+    .badge-nao { background: #fce4d6; color: #c65911; }
+    .badge-com { background: #f8d7da; color: #842029; }
+    .badge-sem { background: #d4edda; color: #155724; }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .btn-edit { padding: 5px 10px; font-size: 12px; background: #000080; color: white; border: 1px solid #000080; border-radius: 4px; cursor: pointer; font-weight: 600; transition: all 0.3s; }
+    .btn-edit:hover { background: white; color: #000080; }
+    .btn-delete { padding: 5px 10px; font-size: 12px; background: #dc3545; color: white; border: 1px solid #dc3545; border-radius: 4px; cursor: pointer; font-weight: 600; margin-left: 4px; transition: all 0.3s; }
+    .btn-delete:hover { background: white; color: #dc3545; }
+
+    .btn-group { display: flex; gap: 12px; margin-top: 20px; }
+    .btn { padding: 10px 16px; border: 0.5px solid #ccc; border-radius: 4px; background: transparent; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.3s; }
+    .btn:hover { background: #eee; }
+
+    .btn-primary { background: #000080; color: #fff; border: 1px solid #000080; }
+    .btn-primary:hover { background: white; color: #000080; }
+    .btn-primary:disabled { opacity: .6; cursor: not-allowed; }
+
+    .crud-box { background: #f8f9fa; border: 1px dashed #ccc; padding: 15px; border-radius: 6px; margin-top: 15px; }
+    .crud-inline { display: flex; gap: 10px; margin-bottom: 10px; }
+    .crud-list { max-height: 120px; overflow-y: auto; background: white; border: 1px solid #ddd; padding: 5px; border-radius: 4px; }
+    .crud-item { display: flex; justify-content: space-between; align-items: center; padding: 4px; font-size: 12px; border-bottom: 1px solid #eee; }
+  </style>
+</head>
+<body class="qc-body">
+
+<div id="qc-page-content">
+  <div class="container">
+
+    <div class="tabs">
+      <button class="tab-btn active" data-aba="novo">Registrar nova ocorrência</button>
+      <button class="tab-btn" data-aba="lista">Consultar ocorrências</button>
+      <button class="tab-btn tab-qualidade" id="aba-parametros" data-aba="parametros">Parâmetros do Sistema</button>
+      <button class="tab-btn" data-aba="dashboard">Dashboard Geral</button>
+    </div>
+
+    <div class="tab-content active" id="novo">
+      <div class="form-card">
+        <h3>Nova ocorrência</h3>
+
+        <div class="form-section">
+          <h4 style="font-size:14px;font-weight:500;margin-bottom:12px;color:#666;">Identificação</h4>
+          <div class="form-row col3">
+            <div class="form-group">
+              <label>Número (previsto) <span class="required">*</span></label>
+              <input type="text" id="numero" readonly style="background:#eee;">
+            </div>
+            <div class="form-group">
+              <label>Data da ocorrência <span class="required">*</span></label>
+              <input type="date" id="data">
+            </div>
+            <div class="form-group">
+              <label>Unidade causadora <span class="required">*</span></label>
+              <select id="unidade"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h4 style="font-size:14px;font-weight:500;margin-bottom:12px;color:#666;">Documento e transporte</h4>
+          <div class="form-row">
+            <div class="form-group">
+              <label>NF-e</label>
+              <input type="text" id="nfe" placeholder="Opcional">
+            </div>
+
+            <div class="form-group">
+              <label id="lbl-cte">CT-e <span class="required" id="req-cte">*</span></label>
+              <div class="cte-inline-group">
+                <input type="text" id="cte-sigla" class="cte-sigla" placeholder="GRU" maxlength="3">
+                <input type="text" id="cte-numero" class="cte-numero" placeholder="Número" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+                <span>-</span>
+                <input type="text" id="cte-digito" class="cte-digito" placeholder="0" maxlength="1" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+              </div>
+              <button type="button" id="btn-ignorar-cte" class="btn-toggle-cte">Ocorrência sem CT-e</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h4 style="font-size:14px;font-weight:500;margin-bottom:12px;color:#666;">Informações da carga</h4>
+          <div class="form-row col4">
+            <div class="form-group">
+              <label>Remetente</label>
+              <input type="text" id="remetente" placeholder="Opcional">
+            </div>
+            <div class="form-group">
+              <label>Destinatário</label>
+              <input type="text" id="destinatario" placeholder="Opcional">
+            </div>
+            <div class="form-group">
+              <label>Volumes</label>
+              <input type="number" id="volumes" min="0" placeholder="Opcional">
+            </div>
+            <div class="form-group">
+              <label>Volumes com problema</label>
+              <input type="number" id="volumesProblema" min="0" placeholder="Opcional">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h4 style="font-size:14px;font-weight:500;margin-bottom:12px;color:#666;">Reclamação</h4>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label>Reclamação <span class="required">* (Mínimo de 20 caracteres)</span></label>
+            <textarea id="reclamacao" minlength="20" placeholder="Descreva a reclamação com detalhes..."></textarea>
+            <span class="char-hint" id="char-count">0 / 20 caracteres mínimos</span>
+          </div>
+          <div class="form-group">
+            <label>Resumo da reclamação <span class="required">*</span></label>
+            <select id="resumo"></select>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h4 style="font-size:14px;font-weight:500;margin-bottom:12px;color:#666;">Correção e responsável</h4>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label>Causador <span style="color:#666;font-weight:normal;">(opcional)</span></label>
+            <input type="text" id="causador" placeholder="Opcional">
+          </div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label>Correção imediata <span class="required">*</span></label>
+            <textarea id="correcao" placeholder="Descreva o que foi feito para corrigir..."></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Responsável pela correção <span class="required">*</span></label>
+              <input type="text" id="responsavel" placeholder="Pessoa responsável para corrigir">
+            </div>
+            <div class="form-group">
+              <label>Data da solução <span style="color:#666;font-weight:normal;">(preenche depois)</span></label>
+              <input type="date" id="dataSolucao">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:12px;">
+            <label>Ação corretiva vinculada <span style="color:#666;font-weight:normal;">(edição exclusiva do Master)</span></label>
+            <select id="acao-corretiva-select"><option value="">Nenhuma</option></select>
+            <div id="acao-corretiva-texto" style="display:none;padding:8px 12px;border:0.5px solid #ccc;border-radius:4px;font-size:14px;background:#f1f1f1;color:#555;">Nenhuma</div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h4 style="font-size:14px;font-weight:500;margin-bottom:12px;color:#666;">Cliente e ressalva</h4>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Houve contato com o cliente <span class="required">*</span></label>
+              <select id="contato">
+                <option value="">Selecione...</option>
+                <option value="sim">Sim</option>
+                <option value="nao">Não</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Ressalva <span class="required">*</span></label>
+              <select id="ressalva">
+                <option value="">Selecione...</option>
+                <option value="com">Com ressalva</option>
+                <option value="sem">Sem ressalva</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-group">
+          <button class="btn btn-primary" id="btn-salvar">Salvar ocorrência</button>
+          <button class="btn" id="btn-limpar">Limpar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="lista">
+      <div class="form-card">
+        <h3>Consultar e Filtrar Ocorrências</h3>
+
+        <div class="filter-grid">
+          <div class="form-group">
+            <label>Número Ocorrência</label>
+            <input type="text" id="f-numero" placeholder="Nº...">
+          </div>
+          <div class="form-group">
+            <label>Data Ocorrência</label>
+            <input type="date" id="f-data">
+          </div>
+          <div class="form-group">
+            <label>Unidade Causadora</label>
+            <select id="f-unidade"></select>
+          </div>
+          <div class="form-group" id="f-box-registradora">
+            <label>Unidade que Registrou</label>
+            <select id="f-registradora"></select>
+          </div>
+          <div class="form-group">
+            <label>Status Atual</label>
+            <select id="f-status">
+              <option value="">Todos</option>
+              <option value="aberta">Aberta</option>
+              <option value="fechada">Fechada</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Filtrar por CT-e</label>
+            <div class="cte-inline-group">
+              <input type="text" id="f-cte-sigla" class="cte-sigla" placeholder="GRU" maxlength="3">
+              <input type="text" id="f-cte-numero" class="cte-numero" placeholder="Número">
+              <span>-</span>
+              <input type="text" id="f-cte-digito" class="cte-digito" placeholder="0" maxlength="1">
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+            <button class="btn btn-primary" id="btn-filtrar">Aplicar Filtros</button>
+            <button class="btn" id="btn-limpar-filtros">Limpar Filtros</button>
+            <button class="btn" id="btn-atualizar-lista">Atualizar</button>
+            <button class="btn btn-primary" id="btn-exportar-excel" style="background:#1d6f42;border-color:#1d6f42;">Baixar Excel</button>
+        </div>
+
+        <div class="table-wrapper">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Nº</th><th>Data</th><th>Unid. Reg.</th><th>Unid. Causadora</th>
+                <th>CT-e</th><th>Destinatário</th><th>Resumo</th><th>Responsável</th><th>Contato</th><th>Ressalva</th>
+                <th>Status</th><th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tabela-ocorrencias"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="parametros">
+      <div class="form-card">
+        <h3>Configurações de Listas Dinâmicas (Campos Globais)</h3>
+        <p style="font-size:13px; color:#555; margin-bottom:15px;">Adicione ou remova os parâmetros que alimentam os formulários de todas as filiais.</p>
+
+        <div class="form-row">
+          <div class="crud-box">
+            <h4>Gerenciar Unidades Causadoras</h4>
+            <div class="crud-inline" style="margin-top:10px;">
+              <input type="text" id="novo-param-unidade" placeholder="Ex: RSL" style="text-transform:uppercase; padding:6px; flex:1;">
+              <button class="btn btn-primary" style="padding:6px 12px;" id="btn-add-unidade">Inserir</button>
+            </div>
+            <div class="crud-list" id="lista-crud-unidades"></div>
+          </div>
+
+          <div class="crud-box">
+            <h4>Gerenciar Resumos de Reclamações</h4>
+            <div class="crud-inline" style="margin-top:10px;">
+              <input type="text" id="novo-param-resumo" placeholder="Ex: EXTRAVIO TOTAL" style="text-transform:uppercase; padding:6px; flex:1;">
+              <button class="btn btn-primary" style="padding:6px 12px;" id="btn-add-resumo">Inserir</button>
+            </div>
+            <div class="crud-list" id="lista-crud-resumos"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="dashboard">
+      <div class="form-card">
+        <h3>Painel de Controle Estatístico</h3>
+
+        <div class="filter-grid" style="border: 1px solid #ddd; background: #fdfdfd; margin-bottom: 15px;">
+          <div class="form-group">
+            <label>Data Inicial</label>
+            <input type="date" id="dash-data-inicio">
+          </div>
+          <div class="form-group">
+            <label>Data Final</label>
+            <input type="date" id="dash-data-fim">
+          </div>
+          <div class="form-group" style="justify-content: flex-end;">
+            <button class="btn btn-primary" id="btn-filtrar-dashboard">Filtrar Dashboard</button>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="chart-box">
+            <h4 style="font-size:14px; margin-bottom:10px; color:#000080;">1. Casos Abertos vs Fechados</h4>
+            <div class="chart-container">
+              <canvas id="chartStatusAbertoFechado"></canvas>
+            </div>
+          </div>
+          <div class="chart-box">
+            <h4 style="font-size:14px; margin-bottom:10px; color:#000080;">2. Geral: Com vs Sem Ressalva</h4>
+            <div class="chart-container">
+              <canvas id="chartRessalvaGeral"></canvas>
+            </div>
+          </div>
+          <div class="chart-box">
+            <h4 style="font-size:14px; margin-bottom:10px; color:#000080;">3. Distribuição por Unidade (Com vs Sem Ressalva)</h4>
+            <div class="chart-container">
+              <canvas id="chartRessalvasUnidades"></canvas>
+            </div>
+          </div>
+          <div class="chart-box">
+            <h4 style="font-size:14px; margin-bottom:10px; color:#000080;">4. Exclusivo: Casos COM RESSALVA por Unidade</h4>
+            <div class="chart-container">
+              <canvas id="chartApenasComRessalva"></canvas>
+            </div>
+          </div>
+
+          <div class="chart-box chart-box-full">
+            <h4 style="font-size:14px; margin-bottom:10px; color:#000080;">5. Análise de Pareto: Causas Vitais</h4>
+            <div class="chart-container-large">
+              <canvas id="chartParetoOcorrencias"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+  import { auth, db } from '../firebase-config.js';
+  import {
+    doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, runTransaction
+  } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { initLayout, escapeHtml } from '../assets/layout.js';
+
+  const MODULO = 'rg29';
+
+  let perfil = null;
+  let dadosOcorrenciasGlobais = [];
+  let ultimosFiltrados = [];
+  let acoesDisponiveis = [];
+  let editandoIdGlobal = null;
+  let parametrosUnidades = [];
+  let parametrosResumos = [];
+  let cteIsOpcional = false;
+  let c1 = null, c2 = null, c3 = null, c4 = null, c5 = null;
+
+  function vejoTudo() {
+    return souQualidade() || (perfil && perfil.unidade === 'MTZ');
+  }
+
+  function souQualidade() {
+    return perfil && perfil.papel === 'qualidade';
+  }
+
+  document.getElementById('cte-sigla').addEventListener('input', e => e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, ''));
+  document.getElementById('f-cte-sigla').addEventListener('input', e => e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, ''));
+
+  initLayout({
+    auth, db,
+    activeSlug: MODULO,
+    pageTitle: 'RG 29 - Controle de Ocorrências',
+    breadcrumb: 'Qualidade',
+    isoDocId: MODULO,
+    isoCollection: 'modulo_config',
+    isoEditLevel: 'qualidade',
+    homeHref: '../index.html'
+  }).then(async ({ perfil: p }) => {
+    perfil = p;
+
+    document.getElementById('aba-parametros').style.display = souQualidade() ? 'inline-block' : 'none';
+    document.getElementById('f-box-registradora').style.display = vejoTudo() ? 'flex' : 'none';
+
+    // Liga os cliques das abas ANTES de carregar dados: se algum carregamento
+    // falhar (ex.: erro de permissão), a navegação continua funcionando.
+    ligarEventos();
+
+    await carregarParametros().catch(err => console.error('Erro ao carregar parâmetros:', err));
+    await carregarOcorrencias().catch(err => console.error('Erro ao carregar ocorrências:', err));
+    await carregarAcoesParaVinculo().catch(err => console.error('Erro ao carregar ações corretivas:', err));
+    atualizarCampoAcaoCorretiva(null);
+  }).catch(err => console.error('Falha ao montar layout:', err));
+
+  // ---------------------------------------------------------------------
+  // CT-e OPCIONAL
+  // ---------------------------------------------------------------------
+  function alternarObrigatoriedadeCte() {
+    const btn = document.getElementById('btn-ignorar-cte');
+    const reqStar = document.getElementById('req-cte');
+    const inputs = ['cte-sigla', 'cte-numero', 'cte-digito'];
+
+    cteIsOpcional = !cteIsOpcional;
+
+    if (cteIsOpcional) {
+      btn.classList.add('active');
+      btn.textContent = 'Possui CT-e (Reativar)';
+      reqStar.style.display = 'none';
+      inputs.forEach(id => {
+        const input = document.getElementById(id);
+        input.value = '';
+        input.disabled = true;
+        input.style.background = '#eee';
+      });
+    } else {
+      btn.classList.remove('active');
+      btn.textContent = 'Ocorrência sem CT-e';
+      reqStar.style.display = 'inline';
+      inputs.forEach(id => {
+        const input = document.getElementById(id);
+        input.disabled = false;
+        input.style.background = '#fff';
+      });
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // PARÂMETROS DINÂMICOS
+  // ---------------------------------------------------------------------
+  async function carregarParametros() {
+    const snap = await getDocs(collection(db, 'modulos', MODULO, 'parametros'));
+    const todos = snap.docs.map(d => d.data());
+
+    parametrosUnidades = todos.filter(p => p.tipo === 'unidade').map(p => p.valor).sort();
+    parametrosResumos = todos.filter(p => p.tipo === 'resumo').map(p => p.valor).sort();
+
+    povoarSelect('unidade', parametrosUnidades);
+    povoarSelect('f-unidade', parametrosUnidades, true);
+    povoarSelect('f-registradora', parametrosUnidades, true);
+    povoarSelect('resumo', parametrosResumos);
+
+    renderizarCrudParametros('lista-crud-unidades', parametrosUnidades, 'unidade');
+    renderizarCrudParametros('lista-crud-resumos', parametrosResumos, 'resumo');
+  }
+
+  function povoarSelect(idSelect, lista, incluirTodos = false) {
+    const el = document.getElementById(idSelect);
+    if (!el) return;
+    el.innerHTML = incluirTodos ? '<option value="">Todos</option>' : '<option value="">Selecione...</option>';
+    lista.forEach(item => {
+      el.innerHTML += `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`;
+    });
+  }
+
+  function renderizarCrudParametros(idContainer, lista, tipo) {
+    const container = document.getElementById(idContainer);
+    if (!container) return;
+    container.innerHTML = lista.map(item => `
+      <div class="crud-item">
+        <span>${escapeHtml(item)}</span>
+        <button class="btn-delete" style="padding:2px 6px; font-size:10px;" data-tipo="${tipo}" data-valor="${escapeHtml(item)}">X</button>
+      </div>
+    `).join('');
+    container.querySelectorAll('[data-tipo]').forEach(btn => {
+      btn.addEventListener('click', () => removerParametro(btn.dataset.tipo, btn.dataset.valor));
+    });
+  }
+
+  function idParametro(tipo, valor) {
+    // encodeURIComponent evita erro quando o texto tem "/" ou outros
+    // caracteres não permitidos no nome do documento no Firestore.
+    return `${tipo}__${encodeURIComponent(valor)}`;
+  }
+
+  async function adicionarParametro(tipo, idInput) {
+    const val = document.getElementById(idInput).value.trim().toUpperCase();
+    if (!val) return;
+    try {
+      await setDoc(doc(db, 'modulos', MODULO, 'parametros', idParametro(tipo, val)), { tipo, valor: val });
+      document.getElementById(idInput).value = '';
+      await carregarParametros();
+    } catch (err) {
+      alert('Erro ao inserir: ' + err.message);
+    }
+  }
+
+  async function removerParametro(tipo, valor) {
+    if (!confirm(`Deseja remover "${valor}" dos parâmetros globais?`)) return;
+    try {
+      await deleteDoc(doc(db, 'modulos', MODULO, 'parametros', idParametro(tipo, valor)));
+      await carregarParametros();
+    } catch (err) {
+      alert('Erro ao remover: ' + err.message);
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // VÍNCULO COM AÇÃO CORRETIVA (RG34/35) — edição exclusiva do Master
+  // ---------------------------------------------------------------------
+  async function carregarAcoesParaVinculo() {
+    if (!souQualidade()) return;
+    try {
+      const snap = await getDocs(collection(db, 'acoes_qualidade'));
+      acoesDisponiveis = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      acoesDisponiveis.sort((a, b) => (b.num_registro || '').localeCompare(a.num_registro || ''));
+
+      const select = document.getElementById('acao-corretiva-select');
+      select.innerHTML = '<option value="">Nenhuma</option>' + acoesDisponiveis.map(a => `
+        <option value="${escapeHtml(a.id)}">Nº ${escapeHtml(a.num_registro || '?')} — ${escapeHtml((a.descricao_problema || '').slice(0, 60))}</option>
+      `).join('');
+    } catch (err) {
+      console.error('Erro ao carregar ações corretivas:', err);
+    }
+  }
+
+  function atualizarCampoAcaoCorretiva(item) {
+    const select = document.getElementById('acao-corretiva-select');
+    const texto = document.getElementById('acao-corretiva-texto');
+
+    if (souQualidade()) {
+      select.style.display = 'block';
+      texto.style.display = 'none';
+      select.value = (item && item.acaoCorretivaId) ? item.acaoCorretivaId : '';
+    } else {
+      select.style.display = 'none';
+      texto.style.display = 'block';
+      texto.textContent = (item && item.acaoCorretivaNumero)
+        ? `Nº ${item.acaoCorretivaNumero}${item.acaoCorretivaDescricao ? ' — ' + item.acaoCorretivaDescricao : ''}`
+        : 'Nenhuma';
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // OCORRÊNCIAS
+  // ---------------------------------------------------------------------
+  async function carregarOcorrencias() {
+    const snap = await getDocs(collection(db, 'rg29_ocorrencias'));
+    dadosOcorrenciasGlobais = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.numeroSequencial || 0) - (a.numeroSequencial || 0));
+    filtrarConsultas();
+    atualizarNumeroPrevisto();
+  }
+
+  function atualizarNumeroPrevisto() {
+    if (editandoIdGlobal) return;
+    let maior = 0;
+    dadosOcorrenciasGlobais.forEach(item => {
+      if ((item.numeroSequencial || 0) > maior) maior = item.numeroSequencial;
+    });
+    document.getElementById('numero').value = String(maior + 1).padStart(4, '0');
+  }
+
+  async function salvarOcorrencia() {
+    const btn = document.getElementById('btn-salvar');
+    const dataVal = document.getElementById('data').value;
+    const unidadeCausadora = document.getElementById('unidade').value;
+    const resumoVal = document.getElementById('resumo').value;
+    const reclamacaoVal = document.getElementById('reclamacao').value.trim();
+    const correcaoVal = document.getElementById('correcao').value.trim();
+    const responsavelVal = document.getElementById('responsavel').value.trim();
+    const contatoVal = document.getElementById('contato').value;
+    const ressalvaVal = document.getElementById('ressalva').value;
+    const dataSolucaoVal = document.getElementById('dataSolucao').value;
+
+    let cteMontado = 'SEM CT-E';
+    if (!cteIsOpcional) {
+      const cteSigla = document.getElementById('cte-sigla').value.trim().toUpperCase();
+      const cteNum = document.getElementById('cte-numero').value.trim();
+      const cteDig = document.getElementById('cte-digito').value.trim();
+      if (!cteSigla || !cteNum || !cteDig) {
+        alert("Preencha todos os campos do CT-e ou ative o botão 'Ocorrência sem CT-e'.");
+        return;
+      }
+      cteMontado = `${cteSigla}${cteNum}-${cteDig}`;
+    }
+
+    if (!dataVal || !unidadeCausadora || !resumoVal || !correcaoVal || !responsavelVal || !contatoVal || !ressalvaVal) {
+      alert('Preencha todos os campos obrigatórios (*).');
+      return;
+    }
+    if (reclamacaoVal.length < 20) {
+      alert('A reclamação deve ter no mínimo 20 caracteres!');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Salvando...';
+
+    const payload = {
+      data: dataVal,
+      unidadeCausadora: unidadeCausadora,
+      nfe: document.getElementById('nfe').value.trim() || null,
+      cte: cteMontado,
+      remetente: document.getElementById('remetente').value.trim() || null,
+      destinatario: document.getElementById('destinatario').value.trim() || null,
+      volumes: document.getElementById('volumes').value ? parseInt(document.getElementById('volumes').value, 10) : null,
+      volumesProblema: document.getElementById('volumesProblema').value ? parseInt(document.getElementById('volumesProblema').value, 10) : null,
+      reclamacao: reclamacaoVal,
+      resumo: resumoVal,
+      causador: document.getElementById('causador').value.trim() || null,
+      correcao: correcaoVal,
+      responsavel: responsavelVal,
+      dataSolucao: dataSolucaoVal || null,
+      contato: contatoVal,
+      ressalva: ressalvaVal,
+      status: dataSolucaoVal ? 'fechada' : 'aberta'
+    };
+
+    // Só o Master pode alterar o vínculo com a ação corretiva. Se não for,
+    // esses campos nem entram no payload — assim o Firestore recusa a
+    // tentativa (e nada é sobrescrito sem querer).
+    if (souQualidade()) {
+      const acaoEscolhidaId = document.getElementById('acao-corretiva-select').value;
+      const acaoEscolhida = acoesDisponiveis.find(a => a.id === acaoEscolhidaId);
+      payload.acaoCorretivaId = acaoEscolhida ? acaoEscolhida.id : null;
+      payload.acaoCorretivaNumero = acaoEscolhida ? (acaoEscolhida.num_registro || '') : null;
+      payload.acaoCorretivaDescricao = acaoEscolhida ? (acaoEscolhida.descricao_problema || '').slice(0, 120) : null;
+    }
+
+    try {
+      if (editandoIdGlobal) {
+        await updateDoc(doc(db, 'rg29_ocorrencias', editandoIdGlobal), payload);
+      } else {
+        await salvarNovaOcorrenciaComNumero(payload);
+      }
+      alert(editandoIdGlobal ? 'Ocorrência atualizada com sucesso!' : 'Ocorrência registrada com sucesso!');
+      editandoIdGlobal = null;
+      limparFormulario();
+      await carregarOcorrencias();
+      mudarAba('lista');
+    } catch (err) {
+      alert('Erro ao salvar: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Salvar ocorrência';
+    }
+  }
+
+  async function salvarNovaOcorrenciaComNumero(payload) {
+    const contadorRef = doc(db, 'contadores', MODULO);
+    const novoDocRef = doc(collection(db, 'rg29_ocorrencias'));
+
+    await runTransaction(db, async (transaction) => {
+      const contadorSnap = await transaction.get(contadorRef);
+      const ultimo = contadorSnap.exists() ? (contadorSnap.data().ultimoNumero || 0) : 0;
+      const novoNumero = ultimo + 1;
+
+      transaction.set(contadorRef, { ultimoNumero: novoNumero });
+      transaction.set(novoDocRef, {
+        ...payload,
+        numeroSequencial: novoNumero,
+        numero: String(novoNumero).padStart(4, '0'),
+        unidadeRegistrou: perfil.unidade
+      });
+    });
+  }
+
+  function filtrarConsultas() {
+    const fNum = document.getElementById('f-numero').value.trim();
+    const fDat = document.getElementById('f-data').value;
+    const fUni = document.getElementById('f-unidade').value;
+    const fSta = document.getElementById('f-status').value;
+    const fReg = document.getElementById('f-registradora') ? document.getElementById('f-registradora').value : '';
+    const fCteSig = document.getElementById('f-cte-sigla').value.trim().toUpperCase();
+    const fCteNum = document.getElementById('f-cte-numero').value.trim();
+    const fCteDig = document.getElementById('f-cte-digito').value.trim();
+
+    let filtrados = dadosOcorrenciasGlobais.filter(o => {
+      if (fNum && !o.numero.includes(fNum)) return false;
+      if (fDat && o.data !== fDat) return false;
+      if (fUni && o.unidadeCausadora !== fUni) return false;
+      if (vejoTudo() && fReg && o.unidadeRegistrou !== fReg) return false;
+      if (fSta && o.status !== fSta) return false;
+
+      if (o.cte && o.cte !== 'SEM CT-E') {
+        if (fCteSig && !o.cte.toUpperCase().startsWith(fCteSig)) return false;
+        if (fCteNum && !o.cte.includes(fCteNum)) return false;
+        if (fCteDig && !o.cte.endsWith('-' + fCteDig)) return false;
+      } else if (fCteSig || fCteNum || fCteDig) {
+        return false;
+      }
+      return true;
+    });
+
+    ultimosFiltrados = filtrados;
+    renderizarTabelaOcorrencias(filtrados);
+  }
+
+  function limparFiltrosConsultas() {
+    ['f-numero','f-data','f-cte-sigla','f-cte-numero','f-cte-digito','f-unidade','f-status','f-registradora'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    filtrarConsultas();
+  }
+
+  function calcularDiasSolucao(dataIni, dataFim) {
+    if (!dataIni || !dataFim) return '';
+    const d1 = new Date(dataIni + 'T00:00:00');
+    const d2 = new Date(dataFim + 'T00:00:00');
+    const dias = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+    return isNaN(dias) ? '' : dias;
+  }
+
+  function formatarDataBr(dataIana) {
+    if (!dataIana) return '';
+    const p = dataIana.split('-');
+    if (p.length !== 3) return dataIana;
+    return `${p[2]}/${p[1]}/${p[0]}`;
+  }
+
+  function exportarExcel() {
+    if (ultimosFiltrados.length === 0) {
+      alert('Não há ocorrências para exportar com os filtros atuais.');
+      return;
+    }
+
+    const linhas = ultimosFiltrados.map(o => ({
+      'Data': formatarDataBr(o.data),
+      'Unidade detectora': o.unidadeRegistrou || '',
+      'Nº CT-e': o.cte || '',
+      'Problema detectado': o.reclamacao || '',
+      'Resumo da NC': o.resumo || '',
+      'Unidade causadora': o.unidadeCausadora || '',
+      'Correção imediata (ação tomada ou concessão)': o.correcao || '',
+      'Data da solução': o.dataSolucao ? formatarDataBr(o.dataSolucao) : '',
+      'Dias para solução': calcularDiasSolucao(o.data, o.dataSolucao),
+      'Responsável pela solução': o.responsavel || '',
+      'Ação corretiva': '',
+      'Com ou sem ressalva': o.ressalva === 'com' ? 'Com ressalva' : (o.ressalva === 'sem' ? 'Sem ressalva' : '')
+    }));
+
+    const planilha = XLSX.utils.json_to_sheet(linhas);
+    const livro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(livro, planilha, 'Ocorrências RG29');
+    XLSX.writeFile(livro, `RG29_ocorrencias_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
+  function renderizarTabelaOcorrencias(dados) {
+    const tbody = document.getElementById('tabela-ocorrencias');
+    tbody.innerHTML = '';
+
+    if (dados.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;color:#777;padding:15px;">Nenhum registro encontrado.</td></tr>`;
+      return;
+    }
+
+    dados.forEach(o => {
+      const unidReg = o.unidadeRegistrou || '---';
+      let btns = `<button class="btn-edit" data-editar="${o.id}">Editar</button>`;
+      if (souQualidade()) {
+        btns += `<button class="btn-delete" data-excluir="${o.id}">Excluir</button>`;
+      }
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><b>${escapeHtml(o.numero)}</b></td>
+        <td>${o.data ? escapeHtml(o.data.split('-').reverse().join('/')) : ''}</td>
+        <td><b>${escapeHtml(unidReg)}</b></td>
+        <td><span class="badge" style="background:#eee;color:#333;">${escapeHtml(o.unidadeCausadora || '---')}</span></td>
+        <td><b style="color:#000080;">${escapeHtml(o.cte || '---')}</b></td>
+        <td>${escapeHtml(o.destinatario || '---')}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(o.resumo || '---')}</td>
+        <td>${escapeHtml(o.responsavel || '---')}</td>
+        <td><span class="badge badge-${escapeHtml(o.contato)}">${o.contato === 'sim' ? 'Sim' : 'Não'}</span></td>
+        <td><span class="badge badge-${escapeHtml(o.ressalva)}">${o.ressalva === 'com' ? 'Com' : 'Sem'}</span></td>
+        <td><span class="badge badge-${escapeHtml(o.status)}">${escapeHtml(o.status)}</span></td>
+        <td>${btns}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll('[data-editar]').forEach(b => b.addEventListener('click', () => editarOcorrencia(b.dataset.editar)));
+    tbody.querySelectorAll('[data-excluir]').forEach(b => b.addEventListener('click', () => excluirOcorrencia(b.dataset.excluir)));
+  }
+
+  function editarOcorrencia(id) {
+    const o = dadosOcorrenciasGlobais.find(item => item.id === id);
+    if (!o) return;
+    editandoIdGlobal = id;
+    mudarAba('novo');
+
+    document.getElementById('btn-salvar').textContent = 'Atualizar Ocorrência';
+    document.getElementById('numero').value = o.numero;
+    document.getElementById('data').value = o.data || '';
+    document.getElementById('unidade').value = o.unidadeCausadora || '';
+    document.getElementById('nfe').value = o.nfe || '';
+    document.getElementById('remetente').value = o.remetente || '';
+    document.getElementById('destinatario').value = o.destinatario || '';
+    document.getElementById('volumes').value = o.volumes || '';
+    document.getElementById('volumesProblema').value = o.volumesProblema || '';
+    document.getElementById('reclamacao').value = o.reclamacao || '';
+    document.getElementById('resumo').value = o.resumo || '';
+    document.getElementById('causador').value = o.causador || '';
+    document.getElementById('correcao').value = o.correcao || '';
+    document.getElementById('responsavel').value = o.responsavel || '';
+    document.getElementById('dataSolucao').value = o.dataSolucao || '';
+    document.getElementById('contato').value = o.contato || '';
+    document.getElementById('ressalva').value = o.ressalva || '';
+    document.getElementById('char-count').textContent = `${(o.reclamacao || '').length} / 20 caracteres mínimos`;
+    atualizarCampoAcaoCorretiva(o);
+
+    if (o.cte === 'SEM CT-E') {
+      if (!cteIsOpcional) alternarObrigatoriedadeCte();
+    } else {
+      if (cteIsOpcional) alternarObrigatoriedadeCte();
+      if (o.cte && o.cte.includes('-')) {
+        const parteTraco = o.cte.split('-');
+        document.getElementById('cte-digito').value = parteTraco[1] || '';
+        const siglaENumero = parteTraco[0];
+        document.getElementById('cte-sigla').value = siglaENumero.replace(/[^A-Z]/g, '');
+        document.getElementById('cte-numero').value = siglaENumero.replace(/[^0-9]/g, '');
+      } else {
+        document.getElementById('cte-sigla').value = '';
+        document.getElementById('cte-numero').value = o.cte || '';
+        document.getElementById('cte-digito').value = '';
+      }
+    }
+  }
+
+  async function excluirOcorrencia(id) {
+    const justificativa = prompt('Para excluir esta ocorrência, digite o motivo (mínimo de 10 caracteres):');
+    if (justificativa === null) return;
+    if (justificativa.trim().length < 10) {
+      alert('Remoção recusada! Justificativa muito curta.');
+      return;
+    }
+    if (!confirm('Deseja apagar permanentemente este registro?')) return;
+    try {
+      await deleteDoc(doc(db, 'rg29_ocorrencias', id));
+      alert('Ocorrência deletada!');
+      await carregarOcorrencias();
+    } catch (err) {
+      alert('Erro ao excluir: ' + err.message);
+    }
+  }
+
+  function limparFormulario() {
+    editandoIdGlobal = null;
+    if (cteIsOpcional) alternarObrigatoriedadeCte();
+
+    document.getElementById('btn-salvar').textContent = 'Salvar ocorrência';
+    document.getElementById('data').value = '';
+    ['nfe','cte-sigla','cte-numero','cte-digito','remetente','destinatario','causador','correcao','responsavel','reclamacao']
+      .forEach(id => document.getElementById(id).value = '');
+    ['volumes','volumesProblema'].forEach(id => document.getElementById(id).value = '');
+    ['unidade','resumo','contato','ressalva'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('dataSolucao').value = '';
+    document.getElementById('char-count').textContent = '0 / 20 caracteres mínimos';
+    atualizarCampoAcaoCorretiva(null);
+    atualizarNumeroPrevisto();
+  }
+
+  // ---------------------------------------------------------------------
+  // NAVEGAÇÃO
+  // ---------------------------------------------------------------------
+  function mudarAba(idAba) {
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(idAba).classList.add('active');
+    document.querySelector(`.tab-btn[data-aba="${idAba}"]`).classList.add('active');
+    if (idAba === 'dashboard') renderizarGraficosDashboard();
+    if (idAba === 'lista') carregarOcorrencias();
+  }
+
+  function ligarEventos() {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => mudarAba(btn.dataset.aba));
+    });
+
+    document.getElementById('btn-salvar').addEventListener('click', salvarOcorrencia);
+    document.getElementById('btn-limpar').addEventListener('click', limparFormulario);
+    document.getElementById('btn-filtrar').addEventListener('click', filtrarConsultas);
+    document.getElementById('btn-limpar-filtros').addEventListener('click', limparFiltrosConsultas);
+    document.getElementById('btn-atualizar-lista').addEventListener('click', carregarOcorrencias);
+    document.getElementById('btn-exportar-excel').addEventListener('click', exportarExcel);
+    document.getElementById('btn-filtrar-dashboard').addEventListener('click', renderizarGraficosDashboard);
+    document.getElementById('btn-add-unidade').addEventListener('click', () => adicionarParametro('unidade', 'novo-param-unidade'));
+    document.getElementById('btn-add-resumo').addEventListener('click', () => adicionarParametro('resumo', 'novo-param-resumo'));
+    document.getElementById('btn-ignorar-cte').addEventListener('click', alternarObrigatoriedadeCte);
+    document.getElementById('reclamacao').addEventListener('input', () => {
+      document.getElementById('char-count').textContent = `${document.getElementById('reclamacao').value.length} / 20 caracteres mínimos`;
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // DASHBOARD
+  // ---------------------------------------------------------------------
+  function renderizarGraficosDashboard() {
+    if (c1) c1.destroy(); if (c2) c2.destroy(); if (c3) c3.destroy(); if (c4) c4.destroy(); if (c5) c5.destroy();
+
+    const dInicio = document.getElementById('dash-data-inicio').value;
+    const dFim = document.getElementById('dash-data-fim').value;
+
+    const dadosFiltrados = dadosOcorrenciasGlobais.filter(o => {
+      if (dInicio && o.data && o.data < dInicio) return false;
+      if (dFim && o.data && o.data > dFim) return false;
+      return true;
+    });
+
+    const unidadesMap = {};
+    let abertas = 0, fechadas = 0;
+    let totalComRessalva = 0, totalSemRessalva = 0;
+    const ressalvasMap = { com: {}, sem: {} };
+    const apenasComRessalvaMap = {};
+    const frequenciaResumos = {};
+
+    dadosFiltrados.forEach(o => {
+      const uni = o.unidadeCausadora || 'N/I';
+      unidadesMap[uni] = (unidadesMap[uni] || 0) + 1;
+
+      const res = o.resumo || 'NÃO ESPECIFICADO';
+      frequenciaResumos[res] = (frequenciaResumos[res] || 0) + 1;
+
+      if (o.status === 'fechada') fechadas++; else abertas++;
+
+      if (o.ressalva === 'com') {
+        totalComRessalva++;
+        apenasComRessalvaMap[uni] = (apenasComRessalvaMap[uni] || 0) + 1;
+        ressalvasMap.com[uni] = (ressalvasMap.com[uni] || 0) + 1;
+      } else {
+        totalSemRessalva++;
+        ressalvasMap.sem[uni] = (ressalvasMap.sem[uni] || 0) + 1;
+      }
+    });
+
+    const labelsUnidades = Object.keys(unidadesMap);
+    const datalabelsInternoBrancoConfig = {
+      color: '#fff', font: { weight: 'bold', size: 12 }, anchor: 'center', align: 'center', formatter: (value) => value > 0 ? value : ''
+    };
+
+    c1 = new Chart(document.getElementById('chartStatusAbertoFechado'), {
+      type: 'pie',
+      data: { labels: ['Abertas', 'Fechadas'], datasets: [{ data: [abertas, fechadas], backgroundColor: ['#ffc107', '#28a745'] }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { datalabels: datalabelsInternoBrancoConfig } }
+    });
+
+    c2 = new Chart(document.getElementById('chartRessalvaGeral'), {
+      type: 'doughnut',
+      data: { labels: ['Com Ressalva', 'Sem Ressalva'], datasets: [{ data: [totalComRessalva, totalSemRessalva], backgroundColor: ['#dc3545', '#17a2b8'] }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { datalabels: datalabelsInternoBrancoConfig } }
+    });
+
+    const listCom = labelsUnidades.map(u => ressalvasMap.com[u] || 0);
+    const listSem = labelsUnidades.map(u => ressalvasMap.sem[u] || 0);
+    c3 = new Chart(document.getElementById('chartRessalvasUnidades'), {
+      type: 'bar',
+      data: { labels: labelsUnidades, datasets: [
+        { label: 'Com Ressalva', data: listCom, backgroundColor: '#dc3545', datalabels: datalabelsInternoBrancoConfig },
+        { label: 'Sem Ressalva', data: listSem, backgroundColor: '#17a2b8', datalabels: datalabelsInternoBrancoConfig }
+      ]},
+      options: { responsive: true, maintainAspectRatio: false, plugins: { datalabels: { display: true } }, scales: { x: { stacked: true }, y: { stacked: true } } }
+    });
+
+    c4 = new Chart(document.getElementById('chartApenasComRessalva'), {
+      type: 'bar',
+      data: { labels: Object.keys(apenasComRessalvaMap), datasets: [{ label: 'Casos Com Ressalva', data: Object.values(apenasComRessalvaMap), backgroundColor: '#990000', datalabels: datalabelsInternoBrancoConfig }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { datalabels: { display: true } } }
+    });
+
+    const totalRegistrosPareto = dadosFiltrados.length;
+    const itensOrdenados = Object.entries(frequenciaResumos).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const labelsPareto = itensOrdenados.map(item => item[0]);
+    const dadosBarrasPareto = itensOrdenados.map(item => item[1]);
+
+    let somaAcumulada = 0;
+    const dadosLinhaPareto = dadosBarrasPareto.map(valor => {
+      somaAcumulada += valor;
+      return totalRegistrosPareto > 0 ? parseFloat(((somaAcumulada / totalRegistrosPareto) * 100).toFixed(1)) : 0;
+    });
+
+    c5 = new Chart(document.getElementById('chartParetoOcorrencias'), {
+      type: 'bar',
+      data: {
+        labels: labelsPareto,
+        datasets: [
+          { type: 'line', label: '% Acumulada', data: dadosLinhaPareto, borderColor: '#ff1e1e', backgroundColor: '#ff1e1e', borderWidth: 2, yAxisID: 'yPorcentagem', pointRadius: 4, fill: false, datalabels: { anchor: 'end', align: 'top', offset: 4, color: '#ff1e1e', font: { size: 10, weight: 'bold' }, formatter: (value) => value + '%' } },
+          { type: 'bar', label: 'Frequência (Casos)', data: dadosBarrasPareto, backgroundColor: '#000080', yAxisID: 'yOcorrencias', borderRadius: 4, datalabels: datalabelsInternoBrancoConfig }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { datalabels: { display: true } },
+        scales: {
+          yOcorrencias: { type: 'linear', position: 'left', ticks: { beginAtZero: true } },
+          yPorcentagem: { type: 'linear', position: 'right', min: 0, max: 110, ticks: { callback: (value) => value <= 100 ? value + '%' : '' } },
+          x: { ticks: { maxRotation: 45, minRotation: 30, font: { size: 10 } } }
+        }
+      }
+    });
+  }
+</script>
+</body>
+</html>

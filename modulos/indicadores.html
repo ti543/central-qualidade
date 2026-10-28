@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RG 06 - Monitoramento de Indicadores Translog</title>
+  <style>
+    :root {
+      --primary-color: #000080;
+      --secondary-color: #000050;
+      --light-bg: #f4f6f9;
+      --border-color: #ccc;
+      --success-bg: #c6efce; --success-text: #006100;
+      --alert-bg: #ffeb9c; --alert-text: #9c6500;
+      --danger-bg: #ffc7ce; --danger-text: #9c0006;
+      --col-width: 85px;
+      --unit-col-width: 180px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; background-color: var(--light-bg); padding-bottom: 60px; }
+    
+    body.readonly-mode .edit-only, body.readonly-mode button:not(.mode-toggle):not(.nav-btn), body.readonly-mode .th-input-edit { display: none !important; }
+    body.readonly-mode .th-text-readonly { display: block !important; }
+    body.readonly-mode input, body.readonly-mode textarea, body.readonly-mode select { border: none !important; background: transparent !important; pointer-events: none; color: inherit; }
+    body.readonly-mode .sidebar .nav-btn { pointer-events: auto !important; cursor: pointer !important; }
+
+    /* CABEÇALHO GLOBAL NORMATIVO */
+    .iso-header-card {
+      background: white; border: 1px solid var(--border-color); border-bottom: 4px solid var(--primary-color);
+      margin: 15px; padding: 15px 25px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: space-between; gap: 25px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .header-left { display: flex; align-items: center; gap: 20px; flex: 1; min-width: 0; }
+    .header-logo { height: 50px; object-fit: contain; }
+    .header-title { flex: 1; min-width: 0; }
+    .header-title h1 { font-size: 18px; color: var(--primary-color); font-weight: 800; text-transform: uppercase; }
+    
+    .header-controls { display: flex; align-items: center; gap: 15px; flex-shrink: 0; }
+    .header-meta-vertical { display: flex; flex-direction: column; gap: 4px; background: #f8f9fa; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 11px; min-width: 130px; }
+    .header-meta-vertical div { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; color: #555; }
+    .header-meta-vertical input { border: none; background: transparent; font-weight: bold; width: 65px; text-align: right; color: #333; font-size: 11px; }
+
+    /* METADADOS ESPECÍFICOS DO INDICADOR ATIVO */
+    .indicador-meta-box {
+      display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px;
+      background: #fff; border: 1px solid #ddd; padding: 12px 18px; border-radius: 6px; margin-bottom: 15px;
+    }
+    .meta-field { display: flex; flex-direction: column; gap: 4px; }
+    .meta-field label { font-size: 11px; font-weight: bold; color: var(--primary-color); text-transform: uppercase; }
+    .meta-field input, .meta-field select { padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; font-weight: 600; }
+
+    /* LAYOUT DA ÁREA DE TRABALHO */
+    .main-layout { display: flex; min-height: 80vh; margin: 0 15px; gap: 15px; }
+    .sidebar { width: 280px; background: white; border: 1px solid #ddd; border-radius: 8px; padding: 15px; height: fit-content; }
+    .sidebar h3 { font-size: 11px; text-transform: uppercase; color: #777; margin: 15px 0 5px 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+    
+    .nav-btn { width: 100%; text-align: left; padding: 9px 12px; margin-bottom: 3px; border: none; background: transparent; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; color: #495057; display: flex; justify-content: space-between; align-items: center; }
+    .nav-btn:hover { background: #f0f2f5; }
+    .nav-btn.active { background: var(--primary-color); color: white; }
+    .menu-status-dot { inline-size: 10px; block-size: 10px; display: inline-block; border-radius: 50%; margin-right: 8px; vertical-align: middle; background-color: #ccc; }
+
+    .content-area { flex: 1; min-width: 0; }
+    .card { background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd; box-shadow: 0 2px 8px rgba(0,0,0,0.02); margin-bottom: 25px; }
+    .card h2 { font-size: 14px; color: var(--primary-color); margin-bottom: 15px; border-left: 4px solid var(--primary-color); padding-left: 10px; text-transform: uppercase; }
+
+    /* TABELAS EXCEL-STYLE COM AJUSTE DE LARGURA */
+    .table-responsive { overflow-x: auto; margin: 15px 0; border: 1px solid #ccc; border-radius: 4px; width: 100%; }
+    .excel-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 11px; table-layout: fixed; }
+    .excel-table th, .excel-table td { padding: 6px; border: 1px solid #bbb; width: var(--col-width); overflow: hidden; text-overflow: ellipsis; position: relative; }
+    
+    .excel-table th:first-child, .excel-table td:first-child { width: var(--unit-col-width) !important; text-align: left; padding-left: 8px; }
+    .excel-table th { background: var(--primary-color); color: white; font-weight: 600; }
+    
+    .th-input-edit { width: 100%; background: transparent; border: none; border-bottom: 1px dashed rgba(255,255,255,0.5); color: white; text-align: center; font-size: 11px; font-weight: bold; padding: 2px 0; }
+    .th-input-edit:focus { background: rgba(255,255,255,0.15); outline: none; border-bottom: 1px solid white; }
+    .th-text-readonly { display: none; word-wrap: break-word; }
+    .th-clickable-cfg { cursor: pointer; padding: 4px 0; display: block; }
+    .th-clickable-cfg:hover { background-color: rgba(255,255,255,0.15); }
+
+    .input-cell { width: 100%; border: none; background: transparent; text-align: center; font-size: 11px; padding: 2px 0; font-weight: inherit; color: inherit; }
+    .input-cell:focus { background: white; outline: 2px solid var(--primary-color); border-radius: 2px; }
+
+    .v { background-color: var(--success-bg) !important; color: var(--success-text) !important; font-weight: bold; }
+    .a { background-color: var(--alert-bg) !important; color: var(--alert-text) !important; font-weight: bold; }
+    .d { background-color: var(--danger-bg) !important; color: var(--danger-text) !important; font-weight: bold; }
+
+    /* CONFIGURADOR DE CORES DA COLUNA MODAL FLUTUANTE */
+    .col-color-popover { position: fixed; background: white; border: 1px solid #bbb; border-radius: 8px; padding: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.15); z-index: 9999; display: none; width: 220px; font-size: 12px; }
+    .col-color-popover h4 { font-size: 11px; color: var(--primary-color); text-transform: uppercase; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+    .popover-field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+    .popover-field label { font-size: 10px; font-weight: bold; }
+    .popover-field input { padding: 4px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; }
+
+    /* ATAS E REUNIÕES */
+    .meeting-card { background: #fdfdfd; border: 1px solid #ddd; padding: 12px; border-radius: 6px; margin-top: 15px; }
+    /* Ajuste de Proporção: Campo 3 (Análise) maior, Campo 4 (Ação) menor */
+    .meeting-row { display: grid; grid-template-columns: 120px 2.5fr 1.2fr 1fr 120px 130px; gap: 8px; align-items: center; margin-bottom: 6px; background: white; padding: 8px; border-radius: 4px; border: 1px solid #eee; }
+    .meeting-row input, .meeting-row select { width: 100%; padding: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; }
+
+    .mode-toggle { background: #ffc107; color: #212529; font-weight: bold; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .btn-action { background: var(--primary-color); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; margin-right: 5px; }
+    .tfoot-total { background: #eaeaea; font-weight: bold; color: #333; }
+    .tfoot-total td { font-weight: bold; border-top: 2px solid #999; }
+    .size-control-wrapper { display: flex; gap: 15px; margin-bottom: 10px; flex-wrap: wrap; }
+    .size-control-box { display: flex; align-items: center; gap: 10px; background: #fff; padding: 10px; border-radius: 6px; border: 1px solid #ddd; font-size: 12px; font-weight: bold; color: var(--primary-color); width: fit-content; }
+  </style>
+</head>
+<body>
+
+  <div id="carregando" style="position:fixed;inset:0;background:#f4f6f9;display:flex;align-items:center;justify-content:center;color:#666;z-index:99999;">Carregando...</div>
+
+  <a href="../index.html" style="display:inline-block;margin:15px 15px 0;color:#000080;font-size:13px;text-decoration:none;">&larr; Voltar à Central de Qualidade</a>
+
+  <div class="iso-header-card">
+    <div class="header-left">
+      <img src="https://mirindosul.com.br/wp-content/themes/estrutura-basica/assets/images/logo.png" alt="Translog" class="header-logo">
+      <div class="header-title">
+        <h1 id="titulo-sistema-mestre">RG 06 - ACOMPANHAMENTO DOS INDICADORES DE MONITORAMENTO DOS PROCESSOS</h1>
+      </div>
+    </div>
+    <div class="header-controls">
+      <span id="badge-unidade-indicadores" style="background:#000080;color:white;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;"></span>
+      <button id="btn-sair-indicadores" style="background:#f8d7da;border:1px solid #f5c6cb;color:#721c24;padding:5px 10px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;">Sair</button>
+      <button class="mode-toggle" onclick="alternarModoLeitura()" id="btn-leitura-mestre">👁️ Modo Leitura</button>
+      <div class="header-meta-vertical">
+        <div>Elaboração: <input type="text" id="iso-elab" value="03/04/23" onchange="localStorage.setItem('rg06_elab', this.value)"></div>
+        <div>Revisão: <input type="text" id="iso-rev" value="19/02/24" onchange="localStorage.setItem('rg06_rev', this.value)"></div>
+        <div>Versão/Nº: <input type="text" id="iso-num" value="01" onchange="localStorage.setItem('rg06_num', this.value)"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-layout">
+    <aside class="sidebar">
+      <button class="nav-btn active" id="menu-btn-Acoes" onclick="trocarContextoAba('Ações Pendentes')"><span>⚠️ Pendências Agregadas</span></button>
+      
+      <h3>Malha Operacional</h3>
+      <button class="nav-btn" id="menu-btn-001" onclick="trocarContextoAba('001')"><span><span id="dot-001" class="menu-status-dot"></span><span id="menu-txt-001">001 - Eficiência Coleta</span></span></button>
+      <button class="nav-btn" id="menu-btn-002" onclick="trocarContextoAba('002')"><span><span id="dot-002" class="menu-status-dot"></span><span id="menu-txt-002">002 - Eficiência Transferência</span></span></button>
+      <button class="nav-btn" id="menu-btn-003" onclick="trocarContextoAba('003')"><span><span id="dot-003" class="menu-status-dot"></span><span id="menu-txt-003">003 - Eficiência Entrega</span></span></button>
+      <button class="nav-btn" id="menu-btn-004" onclick="trocarContextoAba('004')"><span><span id="dot-004" class="menu-status-dot"></span><span id="menu-txt-004">004 - Resultado Veículos</span></span></button>
+      <button class="nav-btn" id="menu-btn-005" onclick="trocarContextoAba('005')"><span><span id="dot-005" class="menu-status-dot"></span><span id="menu-txt-005">005 - Pendências Unidades</span></span></button>
+
+      <h3>Serviços Veículo/Dia</h3>
+      <button class="nav-btn" id="menu-btn-006-GRU" onclick="trocarContextoAba('006-GRU')"><span><span id="dot-006-GRU" class="menu-status-dot"></span><span id="menu-txt-006-GRU">006 - Serviços (GRU)</span></span></button>
+      <button class="nav-btn" id="menu-btn-006-RSL" onclick="trocarContextoAba('006-RSL')"><span><span id="dot-006-RSL" class="menu-status-dot"></span><span id="menu-txt-006-RSL">006 - Serviços (RSL)</span></span></button>
+      <button class="nav-btn" id="menu-btn-006-ITJ" onclick="trocarContextoAba('006-ITJ')"><span><span id="dot-006-ITJ" class="menu-status-dot"></span><span id="menu-txt-006-ITJ">006 - Serviços (ITJ)</span></span></button>
+      <button class="nav-btn" id="menu-btn-006-CTB" onclick="trocarContextoAba('006-CTB')"><span><span id="dot-006-CTB" class="menu-status-dot"></span><span id="menu-txt-006-CTB">006 - Serviços (CTB)</span></span></button>
+      <button class="nav-btn" id="menu-btn-006-POA" onclick="trocarContextoAba('006-POA')"><span><span id="dot-006-POA" class="menu-status-dot"></span><span id="menu-txt-006-POA">006 - Serviços (POA)</span></span></button>
+      <button class="nav-btn" id="menu-btn-006-CMP" onclick="trocarContextoAba('006-CMP')"><span><span id="dot-006-CMP" class="menu-status-dot"></span><span id="menu-txt-006-CMP">006 - Serviços (CMP)</span></span></button>
+
+      <h3>Qualidade, Frota e Suporte</h3>
+      <button class="nav-btn" id="menu-btn-007" onclick="trocarContextoAba('007')"><span><span id="dot-007" class="menu-status-dot"></span><span id="menu-txt-007">007 - Controle Ocorrências</span></span></button>
+      <button class="nav-btn" id="menu-btn-008-1" onclick="trocarContextoAba('008-1')"><span><span id="dot-008-1" class="menu-status-dot"></span><span id="menu-txt-008-1">008-1 - Índice de Avarias</span></span></button>
+      <button class="nav-btn" id="menu-btn-008-2" onclick="trocarContextoAba('008-2')"><span><span id="dot-008-2" class="menu-status-dot"></span><span id="menu-txt-008-2">008-2 - Gasto com Avarias</span></span></button>
+      <button class="nav-btn" id="menu-btn-009" onclick="trocarContextoAba('009')"><span><span id="dot-009" class="menu-status-dot"></span><span id="menu-txt-009">009 - Taxa de Conversão</span></span></button>
+      <button class="nav-btn" id="menu-btn-010-1" onclick="trocarContextoAba('010-1')"><span><span id="dot-010-1" class="menu-status-dot"></span><span id="menu-txt-010-1">010-1 - Custo Fixo KM</span></span></button>
+      <button class="nav-btn" id="menu-btn-010-2" onclick="trocarContextoAba('010-2')"><span><span id="dot-010-2" class="menu-status-dot"></span><span id="menu-txt-010-2">010-2 - Custo Variável KM</span></span></button>
+      <button class="nav-btn" id="menu-btn-011" onclick="trocarContextoAba('011')"><span><span id="dot-011" class="menu-status-dot"></span><span id="menu-txt-011">011 - Manut. Preventiva</span></span></button>
+
+      <h3>Fornecedores, Pessoas e Clientes</h3>
+      <button class="nav-btn" id="menu-btn-012" onclick="trocarContextoAba('012')"><span><span id="dot-012" class="menu-status-dot"></span><span id="menu-txt-012">012 - Avaliação Fornecedores</span></span></button>
+      <button class="nav-btn" id="menu-btn-013" onclick="trocarContextoAba('013')"><span><span id="dot-013" class="menu-status-dot"></span><span id="menu-txt-013">013 - Capacitação</span></span></button>
+      <button class="nav-btn" id="menu-btn-014" onclick="trocarContextoAba('014')"><span><span id="dot-014" class="menu-status-dot"></span><span id="menu-txt-014">014 - Satisfação Clientes</span></span></button>
+      <button class="nav-btn" id="menu-btn-015" onclick="trocarContextoAba('015')"><span><span id="dot-015" class="menu-status-dot"></span><span id="menu-txt-015">015 - Organização e Limpeza</span></span></button>
+    </aside>
+
+    <main class="content-area" id="painel-principal-conteudo"></main>
+  </div>
+
+  <div id="popover-cores" class="col-color-popover">
+    <h4 id="popover-titulo-col">Configurar Cor da Coluna</h4>
+    <div class="popover-field">
+      <label style="color: green;">🟢 Limiar Verde (>=)</label>
+      <input type="number" id="pop-verde" step="any" placeholder="Padrão">
+    </div>
+    <div class="popover-field">
+      <label style="color: #9c6500;">🟡 Limiar Amarelo (>=)</label>
+      <input type="number" id="pop-amarelo" step="any" placeholder="Padrão">
+    </div>
+    <div style="display:flex; gap:5px; margin-top:5px;">
+      <button class="btn-action" style="background:#28a745; flex:1; margin:0; padding:4px;" onclick="salvarConfigCorColuna()">Salvar</button>
+      <button class="btn-action" style="background:#6c757d; flex:1; margin:0; padding:4px;" onclick="fecharPopoverCores()">Fechar</button>
+    </div>
+  </div>
+
+  <script>
+    const mesesIdsFixos = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+    
+    let filtroAgregadoInd = "";
+    let filtroAgregadoMes = "";
+    let filtroAgregadoStatus = "";
+    
+    let popoverColunaAlvo = "";
+    let dbEstrutura = {};
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    // Ponte com o Firestore: tudo que já chamava localStorage.setItem('rg06_db_v6', ...)
+    // continua funcionando igual, e além de gravar local, agora também sincroniza
+    // pro banco compartilhado (com pequeno debounce pra não gravar a cada tecla).
+    let firestoreDocRef = null;
+    let timeoutSalvarFirestore = null;
+    function agendarSalvamentoFirestore() {
+      if (!firestoreDocRef) return;
+      clearTimeout(timeoutSalvarFirestore);
+      timeoutSalvarFirestore = setTimeout(() => {
+        window.__firestoreSetDoc(firestoreDocRef, dbEstrutura).catch(err => console.error('Erro ao salvar indicadores no Firebase:', err));
+      }, 400);
+    }
+    const _origSetItem = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function(key, value) {
+      _origSetItem(key, value);
+      if (key === 'rg06_db_v6') agendarSalvamentoFirestore();
+    };
+
+    function inicializarBanco() {
+      // IMPORTANTE: `linhas` é sempre um array de OBJETOS {nome, dados} - nunca
+      // array de arrays. O Firestore não aceita array dentro de array
+      // (erro "invalid nested entity"), então essa forma quebraria o save.
+      if (!dbEstrutura["001"]) {
+        dbEstrutura["001"] = {
+          nome: "Eficiência Coleta", processo: "001 - Eficiência Coleta", responsavel: "Operações", meta: "No Prazo: 90% | No Dia: 85%", limiarVerde: 90, limiarAmarelo: 85,
+          titulosCol: { v1: "Prazo (%)", v2: "Dia (%)", v3: "3+ dias (%)" },
+          linhas: [
+            { nome: "Matriz Geral", dados: {
+              jan:{v1:"92",v2:"88",v3:"120"}, fev:{v1:"89",v2:"84",v3:"110"}, mar:{v1:"94",v2:"90",v3:"140"},
+              abr:{v1:"91",v2:"86",v3:"130"}, mai:{v1:"93",v2:"89",v3:"150"}, jun:{v1:"85",v2:"80",v3:"95"},
+              jul:{v1:"",v2:"",v3:""}, ago:{v1:"",v2:"",v3:""}, set:{v1:"",v2:"",v3:""},
+              out:{v1:"",v2:"",v3:""}, nov:{v1:"",v2:"",v3:""}, dez:{v1:"",v2:"",v3:""}
+            } }
+          ], atas: {}
+        };
+      }
+      if (!dbEstrutura["002"]) {
+        dbEstrutura["002"] = { nome: "Eficiência Transferência", processo: "002 - Eficiência Transferência", responsavel: "Frota", meta: "95%", limiarVerde: 95, limiarAmarelo: 90, titulosCol: { meta: "Meta", real: "Realizado" }, linhas: [ { nome: "Matriz Geral", dados: { jan:{meta:"95",real:"96"}, fev:{meta:"95",real:"94"}, mar:{meta:"95",real:"95"} } } ], atas: {} };
+      }
+      if (!dbEstrutura["003"]) {
+        dbEstrutura["003"] = { nome: "Eficiência Entrega", processo: "003 - Eficiência Entrega", responsavel: "Operações", meta: "92%", limiarVerde: 92, limiarAmarelo: 88, titulosCol: { v1: "No Prazo (%)", v2: "3+ Dias (%)", v3: "Quantidade" }, linhas: [ { nome: "Matriz Geral", dados: { jan:{v1:"93",v2:"3",v3:"540"} } } ], atas: {} };
+      }
+      if (!dbEstrutura["004"]) {
+        dbEstrutura["004"] = { nome: "Resultado Veículos", processo: "004 - Resultado Veículos", responsavel: "Controladoria", meta: "Variável", limiarVerde: 85, limiarAmarelo: 80, titulosCol: { v1: "Meta C1", v2: "Meta C2", v3: "Meta C3" }, linhas: [ { nome: "Veículo Tipo A", dados: { jan:{v1:"88",v2:"82",v3:"79"} } } ], atas: {} };
+      }
+      if (!dbEstrutura["005"]) {
+        dbEstrutura["005"] = { nome: "Pendências Unidades", processo: "005 - Pendências Unidades", responsavel: "Qualidade", meta: "85%", limiarVerde: 85, limiarAmarelo: 80, titulosCol: { meta: "Meta Estipulada", real: "Realizado Operacional" }, linhas: [ { nome: "Matriz Geral", dados: Object.fromEntries(mesesIdsFixos.map(m => [m, { meta: "85", real: "82" }])) } ], atas: {} };
+      }
+      const codigos006 = ["006-GRU", "006-RSL", "006-ITJ", "006-CTB", "006-POA", "006-CMP"];
+      codigos006.forEach(c => {
+        if (!dbEstrutura[c]) {
+          dbEstrutura[c] = { nome: `Serviços (${c.split('-')[1]})`, processo: `${c} - Serviços (${c.split('-')[1]})`, responsavel: "Gerência Local", meta: "Controle Interno", limiarVerde: 85, limiarAmarelo: 80, titulosCol: { meta: "Meta Fixada", realA: "Realizado Interno (A)", realB: "Realizado Externo (B)" }, linhas: [ { nome: c.split('-')[1], dados: Object.fromEntries(mesesIdsFixos.map(m => [m, { meta: "100", realA: "95", realB: "92" }])) } ], atas: {} };
+        }
+      });
+      if (!dbEstrutura["007"]) {
+        dbEstrutura["007"] = { nome: "Controle Ocorrências", processo: "007 - Controle Ocorrências", responsavel: "Qualidade", meta: "Redução", titulosCol: { direto: "Ocorrências" }, linhas: [ { nome: "Geral (todas unidades)", dados: Object.fromEntries(mesesIdsFixos.map(m => [m, { direto: "12" }])) } ], atas: {} };
+      }
+      if (!dbEstrutura["008-1"]) {
+        dbEstrutura["008-1"] = { nome: "Índice de Avarias", processo: "008-1 - Índice de Avarias", responsavel: "Segurança", meta: "< 1.5", limiarVerde: 1.5, limiarAmarelo: 2.0, titulosCol: { v1: "Qtd CTe", v2: "Avaria", v3: "Ressalva", calcMil: "Índice/1k" }, linhas: [ { nome: "Geral Translog", dados: { jan:{v1:"10000",v2:"12",v3:"8"} } } ], atas: {} };
+      }
+      if (!dbEstrutura["008-2"]) {
+        dbEstrutura["008-2"] = { nome: "Gasto com Avarias", processo: "008-2 - Gasto com Avarias", responsavel: "Gerência", meta: "Orçamento", limiarVerde: 85, limiarAmarelo: 80, titulosCol: { gasto: "Valor Gasto (R$)", orc: "Meta Orçamento", real: "Realizado Final" }, linhas: [ { nome: "Geral (todas unidades)", dados: Object.fromEntries(mesesIdsFixos.map(m => [m, { gasto: "5000", orc: "4500", real: "90" }])) } ], atas: {} };
+      }
+      if (!dbEstrutura["009"]) {
+        dbEstrutura["009"] = { nome: "Taxa de Conversão", processo: "009 - Taxa de Conversão", responsavel: "Diretoria", meta: "90%", limiarVerde: 90, limiarAmarelo: 85, titulosCol: { emit: "CTe Emitido", semC: "Contratadas sem CTe", volTot: "Volume Total", conv: "Conversão Líquida" }, linhas: [ { nome: "Geral (todas unidades)", dados: Object.fromEntries(mesesIdsFixos.map(m => [m, { emit: "900", semC: "100", volTot: "1000", conv: "90" }])) } ], atas: {} };
+      }
+      if (!dbEstrutura["010-1"]) {
+        dbEstrutura["010-1"] = { nome: "Custo Fixo KM", processo: "010-1 - Custo Fixo KM", responsavel: "Contabilidade", meta: "Informativo", titulosCol: { v1: "Col 1", v2: "Col 2", v3: "Soma (1+2)", v4: "Col 4", v5: "Col 5", v6: "Col 6" }, linhas: [ { nome: "Unidade Central", dados: { jan:{v1:"10",v2:"20",v4:"5",v5:"4",v6:"2"} } } ], atas: {} };
+      }
+      if (!dbEstrutura["010-2"]) {
+        dbEstrutura["010-2"] = { nome: "Custo Variável KM", processo: "010-2 - Custo Variável KM", responsavel: "Manutenção", meta: "Informativo", titulosCol: { v1: "Col 1", v2: "Col 2", v3: "Col 3", v4: "Col 4" }, linhas: [ { nome: "Unidade Central", dados: { jan:{v1:"15",v2:"25",v3:"35",v4:"45"} } } ], atas: {} };
+      }
+      if (!dbEstrutura["011"]) {
+        dbEstrutura["011"] = { nome: "Manut. Preventiva", processo: "011 - Manut. Preventiva", responsavel: "Frota", meta: "100%", limiarVerde: 100, limiarAmarelo: 95, titulosCol: { v1: "Qtd Manutenções", v2: "Realizadas", v3: "Resultado (%)" }, linhas: [ { nome: "Frota Geral", dados: { q1:{v1:"",v2:"",v3:""} } } ], atas: {}, periodos: ["q1","q2","q3"], periodosLabels: { q1: "1º Quadrimestre", q2: "2º Quadrimestre", q3: "3º Quadrimestre" } };
+      }
+      if (!dbEstrutura["012"]) {
+        dbEstrutura["012"] = { nome: "Avaliação Fornecedores", processo: "012 - Avaliação de Fornecedores", responsavel: "Gerente de Frota", meta: "Nota 9,0", limiarVerde: 9.0, limiarAmarelo: 8.0, titulosCol: { meta: "Meta (Nota)", real: "Realizado (Nota)" }, linhas: [ { nome: "Geral", dados: { s1:{meta:"9",real:""} } } ], atas: {}, periodos: ["s1","s2"], periodosLabels: { s1: "1º Semestre", s2: "2º Semestre" } };
+      }
+      if (!dbEstrutura["013"]) {
+        dbEstrutura["013"] = { nome: "Capacitação", processo: "013 - Capacitação (Cumprimento do Programa de Treinamento)", responsavel: "Gerente de RH", meta: "Atingir 100%", limiarVerde: 90, limiarAmarelo: 80, titulosCol: { prog: "Atividades Programadas", real: "Atividades Realizadas", metaP: "Meta (%)", realP: "Realizado (%)" }, linhas: [ { nome: "Geral", dados: { jan:{prog:"",real:"",metaP:"100",realP:""} } } ], atas: {} };
+      }
+      if (!dbEstrutura["014"]) {
+        dbEstrutura["014"] = { nome: "Satisfação Clientes", processo: "014 - Nível de Satisfação dos Clientes", responsavel: "Gerente Comercial", meta: "Nota 9,00", limiarVerde: 9.0, limiarAmarelo: 8.0, titulosCol: { meta: "Meta (Nota)", real: "Realizado (Nota)" }, linhas: [ { nome: "Geral", dados: { anual:{meta:"9",real:""} } } ], atas: {}, periodos: ["anual"], periodosLabels: { anual: "Anual" } };
+      }
+      if (!dbEstrutura["015"]) {
+        dbEstrutura["015"] = { nome: "Organização e Limpeza", processo: "015 - Organização, Ordem e Limpeza", responsavel: "Gerentes", meta: "Nota 9,0", limiarVerde: 9.0, limiarAmarelo: 8.0, titulosCol: { meta: "Meta (Nota)", real: "Realizado (Nota)" }, linhas: [ { nome: "Geral", dados: { s1:{meta:"9",real:""} } } ], atas: {}, periodos: ["s1","s2"], periodosLabels: { s1: "1º Semestre", s2: "2º Semestre" } };
+      }
+
+      Object.keys(dbEstrutura).forEach(k => {
+        if (dbEstrutura[k]) {
+          if (!dbEstrutura[k].titulosCol) dbEstrutura[k].titulosCol = {};
+          if (!dbEstrutura[k].regrasCol) dbEstrutura[k].regrasCol = {};
+          if (!dbEstrutura[k].atas) dbEstrutura[k].atas = {};
+          if (!dbEstrutura[k].processo) dbEstrutura[k].processo = `${k} - ${dbEstrutura[k].nome}`;
+
+          // Indicadores com período customizado (semestral/anual/quadrimestral) usam
+          // dbEstrutura[k].periodos no lugar da grade fixa de 12 meses.
+          const periodosDoIndicador = dbEstrutura[k].periodos || mesesIdsFixos;
+          periodosDoIndicador.forEach(m => {
+            if (dbEstrutura[k].atas && !dbEstrutura[k].atas[m]) {
+              dbEstrutura[k].atas[m] = { dataReuniao: "", decidido: "", acao: "", resp: "", prazo: "", status: "" };
+            }
+          });
+        }
+      });
+    }
+
+    // Rótulo de exibição de um período (mês fixo ou período customizado de um indicador).
+    function rotuloPeriodo(info, m) {
+      if (info && info.periodosLabels && info.periodosLabels[m]) return info.periodosLabels[m];
+      return m;
+    }
+
+    let abaAtiva = "Ações Pendentes";
+
+    function alternarModoLeitura() {
+      document.body.classList.toggle('readonly-mode');
+      document.getElementById('btn-leitura-mestre').innerText = document.body.classList.contains('readonly-mode') ? "✏️ Entrar em Edição" : "👁️ Modo Leitura";
+    }
+
+    function trocarContextoAba(id) {
+      abaAtiva = id;
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      const btnAtivo = document.getElementById(`menu-btn-${id}`);
+      if(btnAtivo) btnAtivo.classList.add('active');
+      fecharPopoverCores();
+      construirTelaPainel();
+    }
+
+    function gerenciarCoresRegra(val, defaultVerde, defaultAmarelo, campoColunaId) {
+      if (val === "" || val === null || val === undefined || isNaN(parseFloat(val))) return "";
+      let n = parseFloat(val);
+      
+      let tVerde = defaultVerde;
+      let tAmarelo = defaultAmarelo;
+
+      if (campoColunaId && dbEstrutura[abaAtiva]?.regrasCol?.[campoColunaId]) {
+        let r = dbEstrutura[abaAtiva].regrasCol[campoColunaId];
+        if (r.verde !== undefined && r.verde !== null && r.verde !== "") tVerde = parseFloat(r.verde);
+        if (r.amarelo !== undefined && r.amarelo !== null && r.amarelo !== "") tAmarelo = parseFloat(r.amarelo);
+      }
+
+      if (abaAtiva === "008-1") {
+        if (n <= tVerde) return "v";
+        if (n <= tAmarelo) return "a";
+        return "d";
+      }
+
+      if (n >= tVerde) return "v";
+      if (n >= tAmarelo) return "a";
+      return "d";
+    }
+
+    function abrirConfigCorColuna(event, campoId, labelPadrao) {
+      event.stopPropagation();
+      if(document.body.classList.contains('readonly-mode')) return;
+
+      popoverColunaAlvo = campoId;
+      const popover = document.getElementById("popover-cores");
+      document.getElementById("popover-titulo-col").innerText = "Configurar Cor: " + labelPadrao;
+      
+      let regraExistente = dbEstrutura[abaAtiva].regrasCol[campoId] || { verde: "", amarelo: "" };
+      document.getElementById("pop-verde").value = regraExistente.verde;
+      document.getElementById("pop-amarelo").value = regraExistente.amarelo;
+
+      popover.style.display = "block";
+      popover.style.left = Math.min(event.clientX, window.innerWidth - 240) + "px";
+      popover.style.top = Math.min(event.clientY, window.innerHeight - 180) + "px";
+    }
+
+    function salvarConfigCorColuna() {
+      if (!popoverColunaAlvo) return;
+      if (!dbEstrutura[abaAtiva].regrasCol) dbEstrutura[abaAtiva].regrasCol = {};
+      
+      let v = document.getElementById("pop-verde").value;
+      let a = document.getElementById("pop-amarelo").value;
+
+      dbEstrutura[abaAtiva].regrasCol[popoverColunaAlvo] = {
+        verde: v !== "" ? parseFloat(v) : "",
+        amarelo: a !== "" ? parseFloat(a) : ""
+      };
+
+      localStorage.setItem("rg06_db_v6", JSON.stringify(dbEstrutura));
+      fecharPopoverCores();
+      construirTelaPainel();
+    }
+
+    function fecharPopoverCores() {
+      document.getElementById("popover-cores").style.display = "none";
+      popoverColunaAlvo = "";
+    }
+
+    function mudarLarguraColunaMestre(novaLarg) {
+      localStorage.setItem('rg06_col_width', novaLarg);
+      document.documentElement.style.setProperty('--col-width', novaLarg + 'px');
+      document.getElementById('lbl-largura-val').innerText = novaLarg + 'px';
+    }
+
+    function mudarLarguraColunaUnidade(novaLarg) {
+      localStorage.setItem('rg06_unit_col_width', novaLarg);
+      document.documentElement.style.setProperty('--unit-col-width', novaLarg + 'px');
+      document.getElementById('lbl-largura-unidade-val').innerText = novaLarg + 'px';
+    }
+
+    function atualizarValorComplexo(lIdx, chaveMes, campoCol, valor) {
+      // Observação: `linhas` é um array de objetos {nome, dados} - NUNCA array
+      // de arrays (Firestore não aceita array dentro de array: "invalid nested entity").
+      if (!dbEstrutura[abaAtiva].linhas[lIdx].dados[chaveMes]) {
+        dbEstrutura[abaAtiva].linhas[lIdx].dados[chaveMes] = {};
+      }
+      dbEstrutura[abaAtiva].linhas[lIdx].dados[chaveMes][campoCol] = valor;
+      localStorage.setItem("rg06_db_v6", JSON.stringify(dbEstrutura));
+      construirTelaPainel();
+    }
+
+    function atualizarValorLinhaDireta(lIdx, colIdx, valor) {
+      // colIdx é sempre 0 (edição do nome da filial/linha) nos pontos onde essa
+      // função é chamada hoje.
+      dbEstrutura[abaAtiva].linhas[lIdx].nome = valor;
+      localStorage.setItem("rg06_db_v6", JSON.stringify(dbEstrutura));
+      construirTelaPainel();
+    }
+
+    function salvarDadosAtaMês(mes, propriedade, valor) {
+      dbEstrutura[abaAtiva].atas[mes][propriedade] = valor;
+      localStorage.setItem("rg06_db_v6", JSON.stringify(dbEstrutura));
+      if (propriedade === "status") construirTelaPainel();
+    }
+
+    function atualizarNomeIndicadorGlobal(novoNomeCompleto) {
+      dbEstrutura[abaAtiva].processo = novoNomeCompleto;
+      
+      let partes = novoNomeCompleto.split('-');
+      let nomeTratado = partes.length > 1 ? partes.slice(1).join('-').trim() : novoNomeCompleto.trim();
+      dbEstrutura[abaAtiva].nome = nomeTratado;
+
+      localStorage.setItem("rg06_db_v6", JSON.stringify(dbEstrutura));
+      
+      const txtMenu = document.getElementById(`menu-txt-${abaAtiva}`);
+      if(txtMenu) txtMenu.innerText = novoNomeCompleto;
+    }
+
+    function thEditavelIndependente(mesId, subColId, labelPadrao) {
+      let campoUnicoId = `${mesId}_${subColId}`;
+      let txt = dbEstrutura[abaAtiva].titulosCol[subColId] || labelPadrao;
+      return `
+        <div class="th-clickable-cfg" onclick="abrirConfigCorColuna(event, '${campoUnicoId}', '${mesId.toUpperCase()} - ${txt}')" title="Configuração de cor isolada para este mês">
+          <input type="text" class="th-input-edit" value="${escapeHtml(txt)}" onchange="dbEstrutura['${abaAtiva}'].titulosCol['${subColId}']=this.value; localStorage.setItem('rg06_db_v6', JSON.stringify(dbEstrutura)); construirTelaPainel();" onclick="event.stopPropagation()">
+          <span class="th-text-readonly">${escapeHtml(txt)}</span>
+        </div>
+      `;
+    }
+
+    function renderizarAcoesPendentesAgregadas() {
+      let html = `
+        <div class="card">
+          <h2>⚠️ Painel Central de Pendências e Tratativas Críticas (Visão Consolidada)</h2>
+          <div style="margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap; background: #f8f9fa; padding: 10px; border-radius: 6px; border: 1px solid #ddd;">
+            <select id="f-ind" onchange="filtroAgregadoInd=this.value; construirTelaPainel();" style="padding:5px; font-size:12px;">
+              <option value="">Filtrar Indicador...</option>
+              ${Object.keys(dbEstrutura).map(k => `<option value="${k}" ${filtroAgregadoInd===k?'selected':''}>${dbEstrutura[k].processo || k}</option>`).join('')}
+            </select>
+            <select id="f-mes" onchange="filtroAgregadoMes=this.value; construirTelaPainel();" style="padding:5px; font-size:12px;">
+              <option value="">Filtrar Mês...</option>
+              ${mesesIdsFixos.map(m => `<option value="${m}" ${filtroAgregadoMes===m?'selected':''}>${m.toUpperCase()}</option>`).join('')}
+            </select>
+            <select id="f-status" onchange="filtroAgregadoStatus=this.value; construirTelaPainel();" style="padding:5px; font-size:12px;">
+              <option value="">Filtrar Status...</option>
+              <option value="Pendente" ${filtroAgregadoStatus==='Pendente'?'selected':''}>Pendente</option>
+              <option value="Em andamento" ${filtroAgregadoStatus==='Em andamento'?'selected':''}>Em andamento</option>
+              <option value="Concluído" ${filtroAgregadoStatus==='Concluído'?'selected':''}>Concluído</option>
+            </select>
+            <button class="btn-action" style="margin:0; background:#6c757d;" onclick="filtroAgregadoInd=''; filtroAgregadoMes=''; filtroAgregadoStatus=''; construirTelaPainel();">Limpar Filtros</button>
+          </div>
+          <div class="table-responsive">
+            <table class="excel-table" style="table-layout: auto; width: 100%;">
+              <thead>
+                <tr>
+                  <th style="width:70px;">Cód</th>
+                  <th style="width:140px;">Indicador / Processo</th>
+                  <th style="width:50px;">Mês</th>
+                  <th style="width:130px;">Data Reunião</th>
+                  <th>Análise do Indicador</th>
+                  <th>Ação Recom./Imediata (Tratativa)</th>
+                  <th style="width:100px;">Responsável</th>
+                  <th style="width:130px;">Prazo</th>
+                  <th style="width:120px;">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+      `;
+
+      let totalLinhas = 0;
+      Object.keys(dbEstrutura).forEach(indKey => {
+        if(filtroAgregadoInd && filtroAgregadoInd !== indKey) return;
+        let indObj = dbEstrutura[indKey];
+        if(!indObj.atas) return;
+
+        (indObj.periodos || mesesIdsFixos).forEach(m => {
+          let ata = indObj.atas[m] || {};
+
+          // Só é uma "pendência" de verdade se algo foi realmente preenchido nessa ata
+          // (análise, ação, responsável, prazo, data de reunião ou status explícito).
+          // Uma ata nunca tocada (todos os campos em branco) nunca aparece aqui,
+          // esteja algum filtro ativo ou não.
+          let temConteudo = !!(ata.decidido || ata.acao || ata.resp || ata.prazo || ata.dataReuniao || ata.status);
+          if(!temConteudo) return;
+
+          if(filtroAgregadoMes && filtroAgregadoMes !== m) return;
+          let statusAtual = ata.status || "Pendente";
+          if(filtroAgregadoStatus && filtroAgregadoStatus !== statusAtual) return;
+
+          totalLinhas++;
+          let clsStatus = "d";
+          if(statusAtual === "Em andamento") clsStatus = "a";
+          if(statusAtual === "Concluído") clsStatus = "v";
+
+          html += `
+            <tr class="${clsStatus}">
+              <td><b>${indKey}</b></td>
+              <td style="text-align:left; font-size:10px;">${escapeHtml(indObj.processo || indObj.nome)}</td>
+              <td style="text-transform:uppercase;"><b>${m}</b></td>
+              <td><input type="date" class="input-cell" value="${ata.dataReuniao||''}" onchange="dbEstrutura['${indKey}'].atas['${m}'].dataReuniao=this.value; localStorage.setItem('rg06_db_v6', JSON.stringify(dbEstrutura));"></td>
+              <td><input type="text" class="input-cell" style="text-align:left; padding-left:4px;" value="${escapeHtml(ata.decidido||'')}" onchange="dbEstrutura['${indKey}'].atas['${m}'].decidido=this.value; localStorage.setItem('rg06_db_v6', JSON.stringify(dbEstrutura));" placeholder="Descrever análise..."></td>
+              <td><input type="text" class="input-cell" style="text-align:left; padding-left:4px;" value="${escapeHtml(ata.acao||'')}" onchange="dbEstrutura['${indKey}'].atas['${m}'].acao=this.value; localStorage.setItem('rg06_db_v6', JSON.stringify(dbEstrutura));" placeholder="Ação corretiva..."></td>
+              <td><input type="text" class="input-cell" value="${escapeHtml(ata.resp||'')}" onchange="dbEstrutura['${indKey}'].atas['${m}'].resp=this.value; localStorage.setItem('rg06_db_v6', JSON.stringify(dbEstrutura));" placeholder="Quem"></td>
+              <td><input type="date" class="input-cell" value="${ata.prazo||''}" onchange="dbEstrutura['${indKey}'].atas['${m}'].prazo=this.value; localStorage.setItem('rg06_db_v6', JSON.stringify(dbEstrutura));"></td>
+              <td>
+                <select class="input-cell" style="font-weight:bold;" onchange="dbEstrutura['${indKey}'].atas['${m}'].status=this.value; localStorage.setItem('rg06_db_v6', JSON.stringify(dbEstrutura)); construirTelaPainel();">
+                  <option value="Pendente" ${statusAtual==='Pendente'?'selected':''}>❌ Pendente</option>
+                  <option value="Em andamento" ${statusAtual==='Em andamento'?'selected':''}>🟡 Em Curso</option>
+                  <option value="Concluído" ${statusAtual==='Concluído'?'selected':''}>✅ Concluído</option>
+                </select>
+              </td>
+            </tr>
+          `;
+        });
+      });
+
+      if(totalLinhas === 0) {
+        html += `<tr><td colspan="9" style="padding:20px; color:#777; font-weight:bold;">Nenhuma tratativa ativa encontrada para os filtros selecionados.</td></tr>`;
+      }
+
+      html += `</tbody></table></div></div>`;
+      return html;
+    }
+
+    function construirTelaPainel() {
+      const alvo = document.getElementById("painel-principal-conteudo");
+      alvo.innerHTML = "";
+
+      let larguraSalva = localStorage.getItem('rg06_col_width') || "85";
+      let larguraUnidadeSalva = localStorage.getItem('rg06_unit_col_width') || "180";
+
+      Object.keys(dbEstrutura).forEach(k => {
+        let dot = document.getElementById(`dot-${k}`);
+        let txtMenu = document.getElementById(`menu-txt-${k}`);
+        if(txtMenu && dbEstrutura[k].processo) {
+          txtMenu.innerText = dbEstrutura[k].processo;
+        }
+        if(dot) {
+          let temPendente = Object.values(dbEstrutura[k].atas || {}).some(a => a.status === "Pendente" || a.status === "Em andamento");
+          let temQualquer = Object.values(dbEstrutura[k].atas || {}).some(a => a.decidido || a.acao);
+          if(temPendente) { dot.style.backgroundColor = "#ffc107"; }
+          else if(temQualquer) { dot.style.backgroundColor = "#28a745"; }
+          else { dot.style.backgroundColor = "#ccc"; }
+        }
+      });
+
+      if (abaAtiva === "Ações Pendentes") {
+        alvo.innerHTML = renderizarAcoesPendentesAgregadas();
+        document.documentElement.style.setProperty('--col-width', larguraSalva + 'px');
+        document.documentElement.style.setProperty('--unit-col-width', larguraUnidadeSalva + 'px');
+        return;
+      }
+
+      const info = dbEstrutura[abaAtiva];
+
+      // Mapeamento dinâmico de colunas visíveis por mês baseado no indicador ativo
+      let subChavesMapeadas = ['direto'];
+      if (["001", "003", "004", "011"].includes(abaAtiva)) subChavesMapeadas = ['v1', 'v2', 'v3'];
+      else if (abaAtiva === "008-1") subChavesMapeadas = ['v1', 'v2', 'v3', 'calcMil'];
+      else if (["005", "002", "012", "014", "015"].includes(abaAtiva)) subChavesMapeadas = ['meta', 'real', 'v3'];
+      else if (abaAtiva === "008-2") subChavesMapeadas = ['gasto', 'orc', 'real'];
+      else if (abaAtiva === "009") subChavesMapeadas = ['emit', 'semC', 'volTot', 'conv'];
+      else if (abaAtiva === "010-1") subChavesMapeadas = ['v1', 'v2', 'v3', 'v4', 'v5', 'v6'];
+      else if (abaAtiva === "010-2") subChavesMapeadas = ['v1', 'v2', 'v3', 'v4'];
+      else if (abaAtiva.startsWith("006")) subChavesMapeadas = ['meta', 'realA', 'realB'];
+      else if (abaAtiva === "013") subChavesMapeadas = ['prog', 'real', 'metaP', 'realP'];
+
+      // Indicadores com período customizado (semestral/anual/quadrimestral) usam
+      // dbEstrutura[abaAtiva].periodos no lugar da grade fixa de 12 meses (jan-dez).
+      const periodosAtivos = (info && info.periodos) || mesesIdsFixos;
+
+      let totalSubColsPorMes = subChavesMapeadas.length;
+
+      let htmlGeral = `
+        <div class="size-control-wrapper edit-only">
+          <div class="size-control-box">
+            <span>Largura Unidade:</span>
+            <input type="range" min="120" max="300" value="${larguraUnidadeSalva}" oninput="mudarLarguraColunaUnidade(this.value)">
+            <span id="lbl-largura-unidade-val">${larguraUnidadeSalva}px</span>
+          </div>
+          <div class="size-control-box">
+            <span>Largura Colunas Mensais:</span>
+            <input type="range" min="65" max="400" value="${larguraSalva}" oninput="mudarLarguraColunaMestre(this.value)">
+            <span id="lbl-largura-val">${larguraSalva}px</span>
+          </div>
+        </div>
+
+        <div class="indicador-meta-box">
+          <div class="meta-field"><label>Indicador / Processo Vinculado</label><input type="text" value="${escapeHtml(info.processo||'')}" onchange="atualizarNomeIndicadorGlobal(this.value)"></div>
+          <div class="meta-field"><label>Gestor / Responsável</label><input type="text" value="${escapeHtml(info.responsavel||'')}" onchange="dbEstrutura['${abaAtiva}'].responsavel=this.value; localStorage.setItem('rg06_db_v6', JSON.stringify(dbEstrutura))"></div>
+          <div class="meta-field"><label>Diretriz de Meta Institucional</label><input type="text" value="${escapeHtml(info.meta||'')}" onchange="dbEstrutura['${abaAtiva}'].meta=this.value; localStorage.setItem('rg06_db_v6', JSON.stringify(dbEstrutura))"></div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <h2>Grelha de Lançamentos Periódicos</h2>
+            <div class="edit-only">
+              <button class="btn-action" style="background:#28a745;" onclick="dbEstrutura['${abaAtiva}'].linhas.push({nome:'Nova Linha/Filial', dados:{}}); localStorage.setItem('rg06_db_v6', JSON.stringify(dbEstrutura)); construirTelaPainel();">+ Inserir Nova Filial</button>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="excel-table">
+              <thead>
+                <tr>
+                  <th rowspan="2">Filial / Contexto</th>
+      `;
+
+      periodosAtivos.forEach(m => {
+        htmlGeral += `<th colspan="${totalSubColsPorMes}" style="text-transform: uppercase;">${rotuloPeriodo(info, m)}</th>`;
+      });
+
+      // Adição do Cabeçalho da Média (Ano/Período) ao lado do último período
+      htmlGeral += `<th colspan="${totalSubColsPorMes}" style="background: #004080;">Média ${info.periodos ? 'Geral' : 'Ano'}</th>`;
+      htmlGeral += `</tr><tr>`;
+
+      // Renderiza as subcolunas dos períodos normais
+      periodosAtivos.forEach(m => {
+        if (["001", "003", "004", "011"].includes(abaAtiva)) {
+          let labels = ["C1", "C2", "C3"];
+          if (abaAtiva === "001") labels = ["Prazo (%)", "Dia (%)", "3+ dias (%)"];
+          if (abaAtiva === "003") labels = ["Prazo (%)", "3+ Dias (%)", "Quantidade"];
+          if (abaAtiva === "011") labels = ["Qtd Manut.", "Realizadas", "Resultado (%)"];
+          htmlGeral += `<th>${thEditavelIndependente(m, 'v1', labels[0])}</th><th>${thEditavelIndependente(m, 'v2', labels[1])}</th><th>${thEditavelIndependente(m, 'v3', labels[2])}</th>`;
+        }
+        else if (abaAtiva === "008-1") {
+          htmlGeral += `<th>${thEditavelIndependente(m, 'v1', 'Qtd CTe')}</th><th>${thEditavelIndependente(m, 'v2', 'Avarias')}</th><th>${thEditavelIndependente(m, 'v3', 'Ressalva')}</th><th>${thEditavelIndependente(m, 'calcMil', 'Índice/1k')}</th>`;
+        }
+        else if (["005", "002", "012", "014", "015"].includes(abaAtiva)) {
+          htmlGeral += `<th>${thEditavelIndependente(m, 'meta', 'Meta')}</th><th>${thEditavelIndependente(m, 'real', 'Realizado')}</th><th>${thEditavelIndependente(m, 'v3', 'Diferença')}</th>`;
+        }
+        else if (abaAtiva === "008-2") {
+          htmlGeral += `<th>${thEditavelIndependente(m, 'gasto', 'Gasto')}</th><th>${thEditavelIndependente(m, 'orc', 'Orçamento')}</th><th>${thEditavelIndependente(m, 'real', 'Real')}</th>`;
+        }
+        else if (abaAtiva === "009") {
+          htmlGeral += `<th>${thEditavelIndependente(m, 'emit', 'Emitidos')}</th><th>${thEditavelIndependente(m, 'semC', 'Sem CTe')}</th><th>${thEditavelIndependente(m, 'volTot', 'Total')}</th><th>${thEditavelIndependente(m, 'conv', 'Conv %')}</th>`;
+        }
+        else if (abaAtiva === "010-1") {
+          htmlGeral += `<th>${thEditavelIndependente(m, 'v1', 'C1')}</th><th>${thEditavelIndependente(m, 'v2', 'C2')}</th><th>${thEditavelIndependente(m, 'v3', 'Soma')}</th><th>${thEditavelIndependente(m, 'v4', 'C4')}</th><th>${thEditavelIndependente(m, 'v5', 'C5')}</th><th>${thEditavelIndependente(m, 'v6', 'C6')}</th>`;
+        }
+        else if (abaAtiva === "010-2") {
+          htmlGeral += `<th>${thEditavelIndependente(m, 'v1', 'V1')}</th><th>${thEditavelIndependente(m, 'v2', 'V2')}</th><th>${thEditavelIndependente(m, 'v3', 'V3')}</th><th>${thEditavelIndependente(m, 'v4', 'V4')}</th>`;
+        }
+        else if (abaAtiva.startsWith("006")) {
+          htmlGeral += `<th>${thEditavelIndependente(m, 'meta', 'Meta Fixa')}</th><th>${thEditavelIndependente(m, 'realA', 'Interno (A)')}</th><th>${thEditavelIndependente(m, 'realB', 'Externo (B)')}</th>`;
+        }
+        else if (abaAtiva === "013") {
+          htmlGeral += `<th>${thEditavelIndependente(m, 'prog', 'Programadas')}</th><th>${thEditavelIndependente(m, 'real', 'Realizadas')}</th><th>${thEditavelIndependente(m, 'metaP', 'Meta (%)')}</th><th>${thEditavelIndependente(m, 'realP', 'Realizado (%)')}</th>`;
+        }
+        else {
+          htmlGeral += `<th>${thEditavelIndependente(m, 'direto', 'Result.')}</th>`;
+        }
+      });
+
+      // Renderiza os sub-rótulos na coluna da Média combinando com o tipo do indicador ativo
+      subChavesMapeadas.forEach(key => {
+        let labelSub = "Média";
+        if (["001", "003", "004", "011"].includes(abaAtiva)) {
+          if (abaAtiva === "001") labelSub = key === 'v1' ? 'M.Prazo' : (key === 'v2' ? 'M.Dia' : 'M.3+d');
+          else if (abaAtiva === "003") labelSub = key === 'v1' ? 'M.Prazo' : (key === 'v2' ? 'M.3+d' : 'M.Qtd');
+          else if (abaAtiva === "011") labelSub = key === 'v1' ? 'M.Qtd' : (key === 'v2' ? 'M.Real' : 'M.Res');
+          else labelSub = "M." + key.toUpperCase();
+        }
+        else if (abaAtiva === "008-1") labelSub = key === 'v1' ? 'M.CTe' : (key === 'v2' ? 'M.Avar' : (key === 'v3' ? 'M.Ress' : 'M.Ind/1k'));
+        else if (["005", "002", "012", "014", "015"].includes(abaAtiva)) labelSub = key === 'meta' ? 'M.Meta' : (key === 'real' ? 'M.Real' : 'M.Dif');
+        else if (abaAtiva === "008-2") labelSub = key === 'gasto' ? 'M.Gast' : (key === 'orc' ? 'M.Orc' : 'M.Real');
+        else if (abaAtiva === "009") labelSub = key === 'emit' ? 'M.Emit' : (key === 'semC' ? 'M.s/CTe' : (key === 'volTot' ? 'M.Tot' : 'M.Conv'));
+        else if (abaAtiva.startsWith("006")) labelSub = key === 'meta' ? 'M.Meta' : (key === 'realA' ? 'M.IntA' : 'M.ExtB');
+        else if (abaAtiva === "013") labelSub = key === 'prog' ? 'M.Prog' : (key === 'real' ? 'M.Real' : (key === 'metaP' ? 'M.Meta%' : 'M.Real%'));
+        else if (key !== 'direto') labelSub = "M." + key.toUpperCase();
+
+        htmlGeral += `<th style="background: #0056b3;">${labelSub}</th>`;
+      });
+
+      htmlGeral += `</tr></thead><tbody>`;
+
+      // Objetos para consolidação matemática das médias por coluna
+      let somasAcumuladas = {};
+      periodosAtivos.forEach(m => {
+        somasAcumuladas[m] = {};
+        subChavesMapeadas.forEach(key => { somasAcumuladas[m][key] = { soma: 0, qtd: 0 }; });
+      });
+
+      info.linhas.forEach((l, lIdx) => {
+        if (!l || typeof l !== 'object') return;
+        let nomeLinha = l.nome || '';
+        if (!l.dados) l.dados = {};
+        
+        htmlGeral += `
+          <tr>
+            <td>
+              <div style="display:flex; align-items:center; gap:4px;">
+                <button class="btn-action edit-only" style="background:#dc3545; padding:2px 5px; margin:0; font-size:9px;" onclick="if(confirm('Excluir filial?')){info.linhas.splice(${lIdx},1); localStorage.setItem('rg06_db_v6', JSON.stringify(dbEstrutura)); construirTelaPainel();}">X</button>
+                <input type="text" class="input-cell" style="text-align:left; font-weight:bold;" value="${escapeHtml(nomeLinha)}" onchange="atualizarValorLinhaDireta(${lIdx}, 0, this.value)">
+              </div>
+            </td>
+        `;
+
+        // Objeto interno para rastrear a soma horizontal desta linha específica
+        let mediaHorizontalLinha = {};
+        subChavesMapeadas.forEach(key => { mediaHorizontalLinha[key] = { soma: 0, qtd: 0 }; });
+
+        periodosAtivos.forEach(m => {
+          let dadosMes = l.dados[m] || {};
+
+          if (["001", "003", "004", "011"].includes(abaAtiva)) {
+            let val1 = dadosMes.v1 || ""; let val2 = dadosMes.v2 || ""; let val3 = dadosMes.v3 || "";
+            if (abaAtiva === "011" && val1 && val2) {
+              val3 = ((parseFloat(val1) / parseFloat(val2)) * 100).toFixed(1);
+            }
+            let cls1 = gerenciarCoresRegra(val1, info.limiarVerde, info.limiarAmarelo, `${m}_v1`);
+            let cls2 = gerenciarCoresRegra(val2, info.limiarVerde, info.limiarAmarelo, `${m}_v2`);
+            let cls3 = gerenciarCoresRegra(val3, info.limiarVerde, info.limiarAmarelo, `${m}_v3`);
+
+            if(val1 !== "" && !isNaN(parseFloat(val1))) { somasAcumuladas[m]['v1'].soma += parseFloat(val1); somasAcumuladas[m]['v1'].qtd++; mediaHorizontalLinha['v1'].soma += parseFloat(val1); mediaHorizontalLinha['v1'].qtd++; }
+            if(val2 !== "" && !isNaN(parseFloat(val2))) { somasAcumuladas[m]['v2'].soma += parseFloat(val2); somasAcumuladas[m]['v2'].qtd++; mediaHorizontalLinha['v2'].soma += parseFloat(val2); mediaHorizontalLinha['v2'].qtd++; }
+            if(val3 !== "" && !isNaN(parseFloat(val3))) { somasAcumuladas[m]['v3'].soma += parseFloat(val3); somasAcumuladas[m]['v3'].qtd++; mediaHorizontalLinha['v3'].soma += parseFloat(val3); mediaHorizontalLinha['v3'].qtd++; }
+
+            htmlGeral += `<td class="${cls1}"><input type="text" class="input-cell" value="${val1}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v1', this.value)"></td>`;
+            htmlGeral += `<td class="${cls2}"><input type="text" class="input-cell" value="${val2}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v2', this.value)"></td>`;
+            htmlGeral += `<td class="${cls3}"><input type="text" class="input-cell" ${abaAtiva==='011'?'disabled':''} value="${val3}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v3', this.value)"></td>`;
+          } 
+          else if (abaAtiva === "008-1") {
+            let val1 = dadosMes.v1 || ""; let val2 = dadosMes.v2 || ""; let val3 = dadosMes.v3 || ""; let valMil = dadosMes.calcMil || "";
+            if(val1 && val2) { valMil = ((parseFloat(val2) / parseFloat(val1)) * 1000).toFixed(2); }
+            let cls1 = gerenciarCoresRegra(val1, info.limiarVerde, info.limiarAmarelo, `${m}_v1`);
+            let cls2 = gerenciarCoresRegra(val2, info.limiarVerde, info.limiarAmarelo, `${m}_v2`);
+            let cls3 = gerenciarCoresRegra(val3, info.limiarVerde, info.limiarAmarelo, `${m}_v3`);
+            let clsMil = gerenciarCoresRegra(valMil, info.limiarVerde, info.limiarAmarelo, `${m}_calcMil`);
+
+            if(val1 !== "" && !isNaN(parseFloat(val1))) { somasAcumuladas[m]['v1'].soma += parseFloat(val1); somasAcumuladas[m]['v1'].qtd++; mediaHorizontalLinha['v1'].soma += parseFloat(val1); mediaHorizontalLinha['v1'].qtd++; }
+            if(val2 !== "" && !isNaN(parseFloat(val2))) { somasAcumuladas[m]['v2'].soma += parseFloat(val2); somasAcumuladas[m]['v2'].qtd++; mediaHorizontalLinha['v2'].soma += parseFloat(val2); mediaHorizontalLinha['v2'].qtd++; }
+            if(val3 !== "" && !isNaN(parseFloat(val3))) { somasAcumuladas[m]['v3'].soma += parseFloat(val3); somasAcumuladas[m]['v3'].qtd++; mediaHorizontalLinha['v3'].soma += parseFloat(val3); mediaHorizontalLinha['v3'].qtd++; }
+            if(valMil !== "" && !isNaN(parseFloat(valMil))) { somasAcumuladas[m]['calcMil'].soma += parseFloat(valMil); somasAcumuladas[m]['calcMil'].qtd++; mediaHorizontalLinha['calcMil'].soma += parseFloat(valMil); mediaHorizontalLinha['calcMil'].qtd++; }
+
+            htmlGeral += `<td class="${cls1}"><input type="text" class="input-cell" value="${val1}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v1', this.value)"></td>`;
+            htmlGeral += `<td class="${cls2}"><input type="text" class="input-cell" value="${val2}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v2', this.value)"></td>`;
+            htmlGeral += `<td class="${cls3}"><input type="text" class="input-cell" value="${val3}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v3', this.value)"></td>`;
+            htmlGeral += `<td class="${clsMil}"><input type="text" class="input-cell" disabled value="${valMil}"></td>`;
+          }
+          else if (["005", "002", "012", "014", "015"].includes(abaAtiva)) {
+            let val1 = dadosMes.meta || ""; let val2 = dadosMes.real || ""; let val3 = dadosMes.v3 || "";
+            if(val1 && val2) val3 = (parseFloat(val2) - parseFloat(val1)).toFixed(1);
+            let cls1 = gerenciarCoresRegra(val1, info.limiarVerde, info.limiarAmarelo, `${m}_meta`);
+            let cls2 = gerenciarCoresRegra(val2, info.limiarVerde, info.limiarAmarelo, `${m}_real`);
+            let cls3 = gerenciarCoresRegra(val3, info.limiarVerde, info.limiarAmarelo, `${m}_v3`);
+
+            if(val1 !== "" && !isNaN(parseFloat(val1))) { somasAcumuladas[m]['meta'].soma += parseFloat(val1); somasAcumuladas[m]['meta'].qtd++; mediaHorizontalLinha['meta'].soma += parseFloat(val1); mediaHorizontalLinha['meta'].qtd++; }
+            if(val2 !== "" && !isNaN(parseFloat(val2))) { somasAcumuladas[m]['real'].soma += parseFloat(val2); somasAcumuladas[m]['real'].qtd++; mediaHorizontalLinha['real'].soma += parseFloat(val2); mediaHorizontalLinha['real'].qtd++; }
+            if(val3 !== "" && !isNaN(parseFloat(val3))) { somasAcumuladas[m]['v3'].soma += parseFloat(val3); somasAcumuladas[m]['v3'].qtd++; mediaHorizontalLinha['v3'].soma += parseFloat(val3); mediaHorizontalLinha['v3'].qtd++; }
+
+            htmlGeral += `<td class="${cls1}"><input type="text" class="input-cell" value="${val1}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'meta', this.value)"></td>`;
+            htmlGeral += `<td class="${cls2}"><input type="text" class="input-cell" value="${val2}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'real', this.value)"></td>`;
+            htmlGeral += `<td class="${cls3}"><input type="text" class="input-cell" disabled value="${val3}"></td>`;
+          }
+          else if (abaAtiva === "008-2") {
+            let val1 = dadosMes.gasto || ""; let val2 = dadosMes.orc || ""; let val3 = dadosMes.real || "";
+            let cls1 = gerenciarCoresRegra(val1, info.limiarVerde, info.limiarAmarelo, `${m}_gasto`);
+            let cls2 = gerenciarCoresRegra(val2, info.limiarVerde, info.limiarAmarelo, `${m}_orc`);
+            let cls3 = gerenciarCoresRegra(val3, info.limiarVerde, info.limiarAmarelo, `${m}_real`);
+
+            if(val1 !== "" && !isNaN(parseFloat(val1))) { somasAcumuladas[m]['gasto'].soma += parseFloat(val1); somasAcumuladas[m]['gasto'].qtd++; mediaHorizontalLinha['gasto'].soma += parseFloat(val1); mediaHorizontalLinha['gasto'].qtd++; }
+            if(val2 !== "" && !isNaN(parseFloat(val2))) { somasAcumuladas[m]['orc'].soma += parseFloat(val2); somasAcumuladas[m]['orc'].qtd++; mediaHorizontalLinha['orc'].soma += parseFloat(val2); mediaHorizontalLinha['orc'].qtd++; }
+            if(val3 !== "" && !isNaN(parseFloat(val3))) { somasAcumuladas[m]['real'].soma += parseFloat(val3); somasAcumuladas[m]['real'].qtd++; mediaHorizontalLinha['real'].soma += parseFloat(val3); mediaHorizontalLinha['real'].qtd++; }
+
+            htmlGeral += `<td class="${cls1}"><input type="text" class="input-cell" value="${val1}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'gasto', this.value)"></td>`;
+            htmlGeral += `<td class="${cls2}"><input type="text" class="input-cell" value="${val2}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'orc', this.value)"></td>`;
+            htmlGeral += `<td class="${cls3}"><input type="text" class="input-cell" value="${val3}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'real', this.value)"></td>`;
+          }
+          else if (abaAtiva === "009") {
+            let val1 = dadosMes.emit || ""; let val2 = dadosMes.semC || ""; let val3 = dadosMes.volTot || ""; let val4 = dadosMes.conv || "";
+            if(val1 && val2) {
+              val3 = (parseFloat(val1) + parseFloat(val2)).toFixed(0);
+              val4 = ((parseFloat(val1) / parseFloat(val3)) * 100).toFixed(1);
+            }
+            let cls1 = gerenciarCoresRegra(val1, info.limiarVerde, info.limiarAmarelo, `${m}_emit`);
+            let cls2 = gerenciarCoresRegra(val2, info.limiarVerde, info.limiarAmarelo, `${m}_semC`);
+            let cls3 = gerenciarCoresRegra(val3, info.limiarVerde, info.limiarAmarelo, `${m}_volTot`);
+            let cls4 = gerenciarCoresRegra(val4, info.limiarVerde, info.limiarAmarelo, `${m}_conv`);
+
+            if(val1 !== "" && !isNaN(parseFloat(val1))) { somasAcumuladas[m]['emit'].soma += parseFloat(val1); somasAcumuladas[m]['emit'].qtd++; mediaHorizontalLinha['emit'].soma += parseFloat(val1); mediaHorizontalLinha['emit'].qtd++; }
+            if(val2 !== "" && !isNaN(parseFloat(val2))) { somasAcumuladas[m]['semC'].soma += parseFloat(val2); somasAcumuladas[m]['semC'].qtd++; mediaHorizontalLinha['semC'].soma += parseFloat(val2); mediaHorizontalLinha['semC'].qtd++; }
+            if(val3 !== "" && !isNaN(parseFloat(val3))) { somasAcumuladas[m]['volTot'].soma += parseFloat(val3); somasAcumuladas[m]['volTot'].qtd++; mediaHorizontalLinha['volTot'].soma += parseFloat(val3); mediaHorizontalLinha['volTot'].qtd++; }
+            if(val4 !== "" && !isNaN(parseFloat(val4))) { somasAcumuladas[m]['conv'].soma += parseFloat(val4); somasAcumuladas[m]['conv'].qtd++; mediaHorizontalLinha['conv'].soma += parseFloat(val4); mediaHorizontalLinha['conv'].qtd++; }
+
+            htmlGeral += `<td class="${cls1}"><input type="text" class="input-cell" value="${val1}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'emit', this.value)"></td>`;
+            htmlGeral += `<td class="${cls2}"><input type="text" class="input-cell" value="${val2}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'semC', this.value)"></td>`;
+            htmlGeral += `<td class="${cls3}"><input type="text" class="input-cell" disabled value="${val3}"></td>`;
+            htmlGeral += `<td class="${cls4}"><input type="text" class="input-cell" disabled value="${val4}"></td>`;
+          }
+          else if (abaAtiva === "010-1") {
+            let val1 = dadosMes.v1 || ""; let val2 = dadosMes.v2 || ""; let val3 = dadosMes.v3 || "";
+            let val4 = dadosMes.v4 || ""; let val5 = dadosMes.v5 || ""; let val6 = dadosMes.v6 || "";
+            if(val1 && val2) val3 = (parseFloat(val1) + parseFloat(val2)).toFixed(2);
+
+            let cls1 = gerenciarCoresRegra(val1, info.limiarVerde, info.limiarAmarelo, `${m}_v1`);
+            let cls2 = gerenciarCoresRegra(val2, info.limiarVerde, info.limiarAmarelo, `${m}_v2`);
+            let cls3 = gerenciarCoresRegra(val3, info.limiarVerde, info.limiarAmarelo, `${m}_v3`);
+            let cls4 = gerenciarCoresRegra(val4, info.limiarVerde, info.limiarAmarelo, `${m}_v4`);
+            let cls5 = gerenciarCoresRegra(val5, info.limiarVerde, info.limiarAmarelo, `${m}_v5`);
+            let cls6 = gerenciarCoresRegra(val6, info.limiarVerde, info.limiarAmarelo, `${m}_v6`);
+
+            if(val1 !== "" && !isNaN(parseFloat(val1))) { somasAcumuladas[m]['v1'].soma += parseFloat(val1); somasAcumuladas[m]['v1'].qtd++; mediaHorizontalLinha['v1'].soma += parseFloat(val1); mediaHorizontalLinha['v1'].qtd++; }
+            if(val2 !== "" && !isNaN(parseFloat(val2))) { somasAcumuladas[m]['v2'].soma += parseFloat(val2); somasAcumuladas[m]['v2'].qtd++; mediaHorizontalLinha['v2'].soma += parseFloat(val2); mediaHorizontalLinha['v2'].qtd++; }
+            if(val3 !== "" && !isNaN(parseFloat(val3))) { somasAcumuladas[m]['v3'].soma += parseFloat(val3); somasAcumuladas[m]['v3'].qtd++; mediaHorizontalLinha['v3'].soma += parseFloat(val3); mediaHorizontalLinha['v3'].qtd++; }
+            if(val4 !== "" && !isNaN(parseFloat(val4))) { somasAcumuladas[m]['v4'].soma += parseFloat(val4); somasAcumuladas[m]['v4'].qtd++; mediaHorizontalLinha['v4'].soma += parseFloat(val4); mediaHorizontalLinha['v4'].qtd++; }
+            if(val5 !== "" && !isNaN(parseFloat(val5))) { somasAcumuladas[m]['v5'].soma += parseFloat(val5); somasAcumuladas[m]['v5'].qtd++; mediaHorizontalLinha['v5'].soma += parseFloat(val5); mediaHorizontalLinha['v5'].qtd++; }
+            if(val6 !== "" && !isNaN(parseFloat(val6))) { somasAcumuladas[m]['v6'].soma += parseFloat(val6); somasAcumuladas[m]['v6'].qtd++; mediaHorizontalLinha['v6'].soma += parseFloat(val6); mediaHorizontalLinha['v6'].qtd++; }
+
+            htmlGeral += `<td class="${cls1}"><input type="text" class="input-cell" value="${val1}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v1', this.value)"></td>`;
+            htmlGeral += `<td class="${cls2}"><input type="text" class="input-cell" value="${val2}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v2', this.value)"></td>`;
+            htmlGeral += `<td class="${cls3}"><input type="text" class="input-cell" disabled value="${val3}"></td>`;
+            htmlGeral += `<td class="${cls4}"><input type="text" class="input-cell" value="${val4}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v4', this.value)"></td>`;
+            htmlGeral += `<td class="${cls5}"><input type="text" class="input-cell" value="${val5}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v5', this.value)"></td>`;
+            htmlGeral += `<td class="${cls6}"><input type="text" class="input-cell" value="${val6}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v6', this.value)"></td>`;
+          }
+          else if (abaAtiva === "010-2") {
+            let val1 = dadosMes.v1 || ""; let val2 = dadosMes.v2 || ""; let val3 = dadosMes.v3 || ""; let val4 = dadosMes.v4 || "";
+            let cls1 = gerenciarCoresRegra(val1, info.limiarVerde, info.limiarAmarelo, `${m}_v1`);
+            let cls2 = gerenciarCoresRegra(val2, info.limiarVerde, info.limiarAmarelo, `${m}_v2`);
+            let cls3 = gerenciarCoresRegra(val3, info.limiarVerde, info.limiarAmarelo, `${m}_v3`);
+            let cls4 = gerenciarCoresRegra(val4, info.limiarVerde, info.limiarAmarelo, `${m}_v4`);
+
+            if(val1 !== "" && !isNaN(parseFloat(val1))) { somasAcumuladas[m]['v1'].soma += parseFloat(val1); somasAcumuladas[m]['v1'].qtd++; mediaHorizontalLinha['v1'].soma += parseFloat(val1); mediaHorizontalLinha['v1'].qtd++; }
+            if(val2 !== "" && !isNaN(parseFloat(val2))) { somasAcumuladas[m]['v2'].soma += parseFloat(val2); somasAcumuladas[m]['v2'].qtd++; mediaHorizontalLinha['v2'].soma += parseFloat(val2); mediaHorizontalLinha['v2'].qtd++; }
+            if(val3 !== "" && !isNaN(parseFloat(val3))) { somasAcumuladas[m]['v3'].soma += parseFloat(val3); somasAcumuladas[m]['v3'].qtd++; mediaHorizontalLinha['v3'].soma += parseFloat(val3); mediaHorizontalLinha['v3'].qtd++; }
+            if(val4 !== "" && !isNaN(parseFloat(val4))) { somasAcumuladas[m]['v4'].soma += parseFloat(val4); somasAcumuladas[m]['v4'].qtd++; mediaHorizontalLinha['v4'].soma += parseFloat(val4); mediaHorizontalLinha['v4'].qtd++; }
+
+            htmlGeral += `<td class="${cls1}"><input type="text" class="input-cell" value="${val1}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v1', this.value)"></td>`;
+            htmlGeral += `<td class="${cls2}"><input type="text" class="input-cell" value="${val2}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v2', this.value)"></td>`;
+            htmlGeral += `<td class="${cls3}"><input type="text" class="input-cell" value="${val3}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v3', this.value)"></td>`;
+            htmlGeral += `<td class="${cls4}"><input type="text" class="input-cell" value="${val4}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'v4', this.value)"></td>`;
+          }
+          else if (abaAtiva.startsWith("006")) {
+            let val1 = dadosMes.meta || ""; let val2 = dadosMes.realA || ""; let val3 = dadosMes.realB || "";
+            let cls1 = gerenciarCoresRegra(val1, info.limiarVerde, info.limiarAmarelo, `${m}_meta`);
+            let cls2 = gerenciarCoresRegra(val2, info.limiarVerde, info.limiarAmarelo, `${m}_realA`);
+            let cls3 = gerenciarCoresRegra(val3, info.limiarVerde, info.limiarAmarelo, `${m}_realB`);
+
+            if(val1 !== "" && !isNaN(parseFloat(val1))) { somasAcumuladas[m]['meta'].soma += parseFloat(val1); somasAcumuladas[m]['meta'].qtd++; mediaHorizontalLinha['meta'].soma += parseFloat(val1); mediaHorizontalLinha['meta'].qtd++; }
+            if(val2 !== "" && !isNaN(parseFloat(val2))) { somasAcumuladas[m]['realA'].soma += parseFloat(val2); somasAcumuladas[m]['realA'].qtd++; mediaHorizontalLinha['realA'].soma += parseFloat(val2); mediaHorizontalLinha['realA'].qtd++; }
+            if(val3 !== "" && !isNaN(parseFloat(val3))) { somasAcumuladas[m]['realB'].soma += parseFloat(val3); somasAcumuladas[m]['realB'].qtd++; mediaHorizontalLinha['realB'].soma += parseFloat(val3); mediaHorizontalLinha['realB'].qtd++; }
+
+            htmlGeral += `<td class="${cls1}"><input type="text" class="input-cell" value="${val1}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'meta', this.value)"></td>`;
+            htmlGeral += `<td class="${cls2}"><input type="text" class="input-cell" value="${val2}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'realA', this.value)"></td>`;
+            htmlGeral += `<td class="${cls3}"><input type="text" class="input-cell" value="${val3}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'realB', this.value)"></td>`;
+          }
+          else if (abaAtiva === "013") {
+            let val1 = dadosMes.prog || ""; let val2 = dadosMes.real || ""; let val3 = dadosMes.metaP || ""; let val4 = dadosMes.realP || "";
+            let cls1 = gerenciarCoresRegra(val1, info.limiarVerde, info.limiarAmarelo, `${m}_prog`);
+            let cls2 = gerenciarCoresRegra(val2, info.limiarVerde, info.limiarAmarelo, `${m}_real`);
+            let cls3 = gerenciarCoresRegra(val3, info.limiarVerde, info.limiarAmarelo, `${m}_metaP`);
+            let cls4 = gerenciarCoresRegra(val4, info.limiarVerde, info.limiarAmarelo, `${m}_realP`);
+
+            if(val1 !== "" && !isNaN(parseFloat(val1))) { somasAcumuladas[m]['prog'].soma += parseFloat(val1); somasAcumuladas[m]['prog'].qtd++; mediaHorizontalLinha['prog'].soma += parseFloat(val1); mediaHorizontalLinha['prog'].qtd++; }
+            if(val2 !== "" && !isNaN(parseFloat(val2))) { somasAcumuladas[m]['real'].soma += parseFloat(val2); somasAcumuladas[m]['real'].qtd++; mediaHorizontalLinha['real'].soma += parseFloat(val2); mediaHorizontalLinha['real'].qtd++; }
+            if(val3 !== "" && !isNaN(parseFloat(val3))) { somasAcumuladas[m]['metaP'].soma += parseFloat(val3); somasAcumuladas[m]['metaP'].qtd++; mediaHorizontalLinha['metaP'].soma += parseFloat(val3); mediaHorizontalLinha['metaP'].qtd++; }
+            if(val4 !== "" && !isNaN(parseFloat(val4))) { somasAcumuladas[m]['realP'].soma += parseFloat(val4); somasAcumuladas[m]['realP'].qtd++; mediaHorizontalLinha['realP'].soma += parseFloat(val4); mediaHorizontalLinha['realP'].qtd++; }
+
+            htmlGeral += `<td class="${cls1}"><input type="text" class="input-cell" value="${val1}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'prog', this.value)"></td>`;
+            htmlGeral += `<td class="${cls2}"><input type="text" class="input-cell" value="${val2}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'real', this.value)"></td>`;
+            htmlGeral += `<td class="${cls3}"><input type="text" class="input-cell" value="${val3}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'metaP', this.value)"></td>`;
+            htmlGeral += `<td class="${cls4}"><input type="text" class="input-cell" value="${val4}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'realP', this.value)"></td>`;
+          }
+          else {
+            let valDireto = dadosMes || "";
+            if (typeof dadosMes === 'object') valDireto = dadosMes.direto || "";
+            let clsD = gerenciarCoresRegra(valDireto, info.limiarVerde, info.limiarAmarelo, `${m}_direto`);
+            
+            if(valDireto !== "" && !isNaN(parseFloat(valDireto))) { somasAcumuladas[m]['direto'].soma += parseFloat(valDireto); somasAcumuladas[m]['direto'].qtd++; mediaHorizontalLinha['direto'].soma += parseFloat(valDireto); mediaHorizontalLinha['direto'].qtd++; }
+
+            htmlGeral += `<td class="${clsD}"><input type="text" class="input-cell" value="${valDireto}" onchange="atualizarValorComplexo(${lIdx}, '${m}', 'direto', this.value)"></td>`;
+          }
+        });
+
+        // Preenche e exibe as células calculadas de Média do Ano para cada subcoluna da linha atual
+        subChavesMapeadas.forEach(key => {
+          let hObj = mediaHorizontalLinha[key];
+          let mAnualLinhaStr = "-";
+          let clsAnual = "";
+          if (hObj.qtd > 0) {
+            let calcAnual = hObj.soma / hObj.qtd;
+            mAnualLinhaStr = calcAnual % 1 === 0 ? calcAnual.toFixed(0) : calcAnual.toFixed(1);
+            clsAnual = gerenciarCoresRegra(mAnualLinhaStr, info.limiarVerde, info.limiarAmarelo, `anual_${key}`);
+          }
+          htmlGeral += `<td class="${clsAnual}" style="font-weight:bold; background: #f0f4f8;">${mAnualLinhaStr}</td>`;
+        });
+
+        htmlGeral += `</tr>`;
+      });
+
+      // Linha Inferior: Média Geral das Unidades (Meses + Média Global Totalizada)
+      htmlGeral += `</tbody><tfoot class="tfoot-total"><tr><td><b>Média das Unidades</b></td>`;
+      
+      let consolidadoAnualTotalizador = {};
+      subChavesMapeadas.forEach(key => { consolidadoAnualTotalizador[key] = { soma: 0, qtd: 0 }; });
+
+      periodosAtivos.forEach(m => {
+        subChavesMapeadas.forEach(key => {
+          let dadosObj = somasAcumuladas[m][key];
+          let mediaStr = "-";
+          let clsMedia = "";
+          if (dadosObj.qtd > 0) {
+            let calc = dadosObj.soma / dadosObj.qtd;
+            mediaStr = calc % 1 === 0 ? calc.toFixed(0) : calc.toFixed(1);
+            clsMedia = gerenciarCoresRegra(mediaStr, info.limiarVerde, info.limiarAmarelo, `${m}_${key}`);
+            
+            // Incrementa o somador horizontal do tfoot
+            consolidadoAnualTotalizador[key].soma += calc;
+            consolidadoAnualTotalizador[key].qtd++;
+          }
+          htmlGeral += `<td class="${clsMedia}"><b>${mediaStr}</b></td>`;
+        });
+      });
+
+      // Renderiza as células finais de interseção da Média do Ano na Linha da Média das Unidades
+      subChavesMapeadas.forEach(key => {
+        let tObj = consolidadoAnualTotalizador[key];
+        let mediaFinalStr = "-";
+        let clsFinal = "";
+        if(tObj.qtd > 0) {
+          let calcFinal = tObj.soma / tObj.qtd;
+          mediaFinalStr = calcFinal % 1 === 0 ? calcFinal.toFixed(0) : calcFinal.toFixed(1);
+          clsFinal = gerenciarCoresRegra(mediaFinalStr, info.limiarVerde, info.limiarAmarelo, `totalglobal_${key}`);
+        }
+        htmlGeral += `<td class="${clsFinal}" style="background:#d0d9e0;"><b>${mediaFinalStr}</b></td>`;
+      });
+
+      htmlGeral += `</tr></tfoot></table></div></div>`;
+
+      // Painel de Análise Crítica e Planos de Ação (Tratativas)
+      htmlGeral += `<div class="card"><h2>Análise Crítica e Planos de Ação (Tratativas por Período)</h2>`;
+
+      periodosAtivos.forEach(m => {
+        let a = info.atas[m] || {};
+        htmlGeral += `
+          <div class="meeting-card">
+            <h3 style="text-transform:uppercase; color:var(--primary-color); font-size:12px; border-bottom:1px solid #ddd; padding-bottom:4px; margin-bottom:8px;">Plano de Ação - ${rotuloPeriodo(info, m)}</h3>
+            <div class="meeting-row">
+              <div>
+                <label style="font-size:9px; font-weight:bold; display:block;">Data Reunião</label>
+                <input type="date" value="${a.dataReuniao||''}" onchange="salvarDadosAtaMês('${m}', 'dataReuniao', this.value)">
+              </div>
+              <div>
+                <label style="font-size:9px; font-weight:bold; display:block;">Análise do Indicador</label>
+                <input type="text" value="${escapeHtml(a.decidido||'')}" onchange="salvarDadosAtaMês('${m}', 'decidido', this.value)" placeholder="Descrever análise do indicador...">
+              </div>
+              <div>
+                <label style="font-size:9px; font-weight:bold; display:block;">Ação Recomendada (Tratativa)</label>
+                <input type="text" value="${escapeHtml(a.acao||'')}" onchange="salvarDadosAtaMês('${m}', 'acao', this.value)" placeholder="Qual plano para mitigar?">
+              </div>
+              <div>
+                <label style="font-size:9px; font-weight:bold; display:block;">Responsável</label>
+                <input type="text" value="${escapeHtml(a.resp||'')}" onchange="salvarDadosAtaMês('${m}', 'resp', this.value)" placeholder="Nome">
+              </div>
+              <div>
+                <label style="font-size:9px; font-weight:bold; display:block;">Prazo</label>
+                <input type="date" value="${a.prazo||''}" onchange="salvarDadosAtaMês('${m}', 'prazo', this.value)">
+              </div>
+              <div>
+                <label style="font-size:9px; font-weight:bold; display:block;">Status Atual</label>
+                <select style="font-weight:bold;" onchange="salvarDadosAtaMês('${m}', 'status', this.value)">
+                  <option value="">Escolha...</option>
+                  <option value="Pendente" ${a.status === 'Pendente' ? 'selected' : ''}>❌ Pendente</option>
+                  <option value="Em andamento" ${a.status === 'Em andamento' ? 'selected' : ''}>🟡 Em Curso</option>
+                  <option value="Concluído" ${a.status === 'Concluído' ? 'selected' : ''}>✅ Concluído</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      htmlGeral += `</div>`;
+
+      alvo.innerHTML = htmlGeral;
+      document.documentElement.style.setProperty('--col-width', larguraSalva + 'px');
+      document.documentElement.style.setProperty('--unit-col-width', larguraUnidadeSalva + 'px');
+    }
+
+    document.addEventListener("click", function(e) {
+      const popover = document.getElementById("popover-cores");
+      if(popover && popover.style.display === "block") {
+        if(!popover.contains(e.target) && !e.target.closest(".th-clickable-cfg")) {
+          fecharPopoverCores();
+        }
+      }
+    });
+
+    // Chamado pelo script-ponte do Firebase (abaixo) quando a permissão já foi
+    // conferida e o documento do Firestore (existente ou recém-criado) chegou.
+    window.__marcarFirestoreDocRef = function(ref) {
+      firestoreDocRef = ref;
+    };
+
+    window.__aplicarDadosFirestore = function(dados) {
+      const primeiraCarga = (dados === null);
+      dbEstrutura = dados || {};
+      inicializarBanco();
+
+      if (primeiraCarga) {
+        // Nenhum dado ainda no Firebase: grava a carga inicial (padrão/seed).
+        agendarSalvamentoFirestore();
+      }
+
+      if(localStorage.getItem('rg06_elab')) document.getElementById('iso-elab').value = localStorage.getItem('rg06_elab');
+      if(localStorage.getItem('rg06_rev')) document.getElementById('iso-rev').value = localStorage.getItem('rg06_rev');
+      if(localStorage.getItem('rg06_num')) document.getElementById('iso-num').value = localStorage.getItem('rg06_num');
+
+      let baseWidth = localStorage.getItem('rg06_col_width') || "85";
+      let baseUnitWidth = localStorage.getItem('rg06_unit_col_width') || "180";
+      document.documentElement.style.setProperty('--col-width', baseWidth + 'px');
+      document.documentElement.style.setProperty('--unit-col-width', baseUnitWidth + 'px');
+
+      construirTelaPainel();
+      document.getElementById('carregando').style.display = 'none';
+    };
+  </script>
+
+  <script type="module">
+    import { auth, db } from '../firebase-config.js';
+    import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const MODULO = 'indicadores';
+    window.__firestoreSetDoc = setDoc;
+
+    document.getElementById('btn-sair-indicadores').addEventListener('click', () => signOut(auth));
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        window.location.href = '../index.html';
+        return;
+      }
+
+      const perfilSnap = await getDoc(doc(db, 'usuarios_perfil', user.uid));
+      const perfil = perfilSnap.exists() ? perfilSnap.data() : null;
+      const souQualidade = !!perfil && perfil.papel === 'qualidade';
+      const temAcesso = !!perfil && (souQualidade || (perfil.modulosPermitidos || []).includes(MODULO));
+
+      if (!temAcesso) {
+        alert('Seu usuário não tem acesso a este módulo.');
+        window.location.href = '../index.html';
+        return;
+      }
+
+      document.getElementById('badge-unidade-indicadores').textContent = perfil.unidade;
+
+      if (!souQualidade) {
+        document.body.classList.add('readonly-mode');
+        const btnModo = document.getElementById('btn-leitura-mestre');
+        if (btnModo) btnModo.style.display = 'none';
+      }
+
+      const docRef = doc(db, 'indicadores_rg06', 'dados');
+      window.__marcarFirestoreDocRef(docRef);
+
+      onSnapshot(docRef, (snap) => {
+        window.__aplicarDadosFirestore(snap.exists() ? snap.data() : null);
+      });
+    });
+  </script>
+</body>
+</html>
