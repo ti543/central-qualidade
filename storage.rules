@@ -1,21 +1,25 @@
 rules_version = '2';
 
-// ============================================================================
-// REGRAS DO FIREBASE STORAGE — Central de Qualidade
-// Cole isto em: Firebase Console > Storage > Regras > Publicar.
+// Regras do Firebase Storage para a Central da Qualidade.
 //
-// Só o módulo "Aprovação de Documentos" usa Storage (upload de PDF/Word dos
-// documentos). Igual ao Firestore: só quem tem papel 'qualidade' pode enviar
-// ou apagar arquivo — confere isso consultando o perfil salvo no Firestore.
-// ============================================================================
-
+// Leitura: qualquer usuário autenticado no sistema pode baixar os
+// documentos da Biblioteca (Manual da Qualidade, PG, IT, etc.) — é
+// conteúdo de referência da empresa, não precisa de papel específico.
+//
+// Escrita: bloqueada para qualquer cliente. O upload/atualização dos
+// documentos é feito só pelo script administrativo (Admin SDK, usando
+// a chave de serviço), nunca pelo navegador. Isso evita que alguém
+// logado suba ou apague arquivos direto pelo site.
 service firebase.storage {
   match /b/{bucket}/o {
-
-    match /documentos_aprovacao/{allPaths=**} {
+    match /biblioteca_documentos/{allPaths=**} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null &&
-        firestore.get(/databases/(default)/documents/usuarios_perfil/$(request.auth.uid)).data.papel == 'qualidade';
+      allow write: if false;
+    }
+
+    // Qualquer outro caminho no bucket: bloqueado por padrão.
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }
