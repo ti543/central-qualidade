@@ -7,10 +7,17 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link href="../assets/layout.css" rel="stylesheet">
   <!-- Lê o .docx inteiro no navegador (nada é enviado pra nenhum servidor além
-       do texto extraído, que vai pro Firestore igual a edição manual). -->
+       do conteúdo extraído, que vai pro Firestore igual a edição manual). -->
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.13.0/mammoth.browser.min.js"></script>
   <!-- Gera o PDF de exportação inteiramente no navegador. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- Editor de texto rico (negrito, cor, imagem) pra digitar/editar documentos
+       na mão, e pra exibir o que foi importado do Word com formatação. -->
+  <link href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
+  <!-- Sanitiza qualquer HTML (importado do Word ou digitado) antes de salvar
+       ou exibir, pra garantir que nada executável entre no sistema. -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
   <style>
     /* Estilos específicos deste módulo. O resto (sidebar, topbar, cards,
        botões, seções) vem de assets/layout.css. */
@@ -113,6 +120,13 @@
       white-space: pre-wrap; font-size: 13.5px; line-height: 1.6; color: #333;
       min-height: 120px;
     }
+    /* Documentos importados do Word (ou editados no editor novo) trazem
+       HTML de verdade — negrito, cor, imagens — então a quebra de linha
+       já vem das próprias tags, não precisamos do pre-wrap. */
+    .doc-conteudo-leitura.is-html { white-space: normal; }
+    .doc-conteudo-leitura.is-html p, .doc-conteudo-leitura.is-html ul, .doc-conteudo-leitura.is-html ol { margin: 0 0 10px; }
+    .doc-conteudo-leitura.is-html img { max-width: 100%; height: auto; border-radius: 4px; display: block; margin: 10px 0; }
+    .doc-conteudo-leitura.is-html h1, .doc-conteudo-leitura.is-html h2, .doc-conteudo-leitura.is-html h3 { color: var(--qc-primary); margin: 14px 0 8px; }
 
     .doc-form label { display: block; font-size: 11px; font-weight: bold; color: #666; margin: 12px 0 4px; text-transform: uppercase; }
     .doc-form input[type="text"], .doc-form select, .doc-form textarea {
@@ -122,6 +136,12 @@
     .doc-form .doc-form-linha { display: flex; gap: 10px; }
     .doc-form .doc-form-linha > div { flex: 1; }
     .doc-form-rodape { display: flex; justify-content: space-between; gap: 10px; margin-top: 18px; }
+
+    /* Editor de texto rico (Quill) usado no formulário de criar/editar. */
+    .doc-form .ql-toolbar.ql-snow { border: 1px solid #ccc; border-radius: 5px 5px 0 0; background: #f8f9fb; }
+    .doc-form .ql-container.ql-snow { border: 1px solid #ccc; border-top: none; border-radius: 0 0 5px 5px; min-height: 320px; font-size: 13px; font-family: inherit; background: #fff; }
+    .doc-form .ql-editor img { max-width: 100%; height: auto; }
+    .doc-form .ql-editor { min-height: 300px; }
 
     .doc-historico-item {
       background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;
@@ -335,6 +355,25 @@
     }
 
     // ---------------------------------------------------------------
+    // CONTEÚDO RICO (negrito, cor, imagens) — documentos importados do
+    // Word ou criados/editados no editor novo guardam HTML de verdade
+    // (campo conteudoFormato = 'html'). Documentos antigos, digitados
+    // antes dessa mudança, continuam em texto puro — por isso sempre
+    // checamos o formato antes de exibir.
+    // ---------------------------------------------------------------
+    function sanitizarHtml(html) {
+      if (!window.DOMPurify) return html; // se o CDN falhar, melhor mostrar sem filtrar do que travar a tela
+      return DOMPurify.sanitize(html || '', { ADD_ATTR: ['target'] });
+    }
+
+    function renderizarConteudoParaLeitura(conteudo, formato) {
+      if (formato === 'html') {
+        return sanitizarHtml(conteudo) || '<p><em>(documento ainda sem conteúdo)</em></p>';
+      }
+      return escapeHtml(conteudo || '(documento ainda sem conteúdo)');
+    }
+
+    // ---------------------------------------------------------------
     // IMPORTAÇÃO EM LOTE A PARTIR DE ARQUIVOS .DOCX
     // Lê o arquivo inteiro no navegador (mammoth.js) — nada é enviado
     // pra nenhum servidor. Só o texto extraído vai pro Firestore quando
@@ -395,8 +434,14 @@
         let texto = '';
         try {
           const buf = await arquivo.arrayBuffer();
-          const resultado = await mammoth.extractRawText({ arrayBuffer: buf });
-          texto = resultado.value || '';
+          // convertToHtml (em vez de extractRawText) preserva negrito, itálico,
+          // títulos, listas e já embute as imagens do Word como base64 — tudo
+          // isso continua sendo lido 100% no navegador, nada sai daqui.
+          // Cor de fonte do Word não é trazida: é uma limitação conhecida do
+          // mammoth.js (ele ignora formatação "visual" de propósito). Dá pra
+          // pintar o texto depois, direto no editor do sistema.
+          const resultado = await mammoth.convertToHtml({ arrayBuffer: buf });
+          texto = sanitizarHtml(resultado.value || '');
         } catch (err) {
           console.error('Erro ao ler', arquivo.name, err);
           ignorados.push(`${arquivo.name} (não consegui ler o conteúdo)`);
@@ -412,6 +457,7 @@
           titulo: interpretado.titulo,
           revisao: interpretado.revisao,
           conteudo: texto,
+          conteudoFormato: 'html',
           nomeArquivo: arquivo.name
         };
 
@@ -481,13 +527,21 @@
       document.getElementById('doc-import-confirmar').addEventListener('click', confirmarImportacao);
     }
 
+    // O Firestore tem um limite de ~1MB por documento. Imagens embutidas
+    // (base64) pesam bem mais que o arquivo original, então um Word com
+    // fotos grandes pode passar desse limite — avisamos antes de tentar.
+    const LIMITE_AVISO_TAMANHO = 700000; // caracteres, com folga antes do limite real
+
     function renderizarLinhasImportacao() {
       const tbody = document.getElementById('doc-import-tbody');
       tbody.innerHTML = listaImportacao.map((c, i) => {
         const existente = documentosCarregados.find(d => d.id === c.chave);
-        const situacao = existente
-          ? `<span class="doc-import-status atualiza">Nova revisão de ${escapeHtml(existente.codigo)}</span>`
-          : `<span class="doc-import-status novo">Documento novo</span>`;
+        const grandeDemais = (c.conteudo || '').length > LIMITE_AVISO_TAMANHO;
+        const situacao = grandeDemais
+          ? `<span class="doc-import-status" style="color:#9c0006;" title="Provavelmente tem imagens grandes demais pro limite do Firestore (1MB por documento)">Pode falhar (muito grande)</span>`
+          : existente
+            ? `<span class="doc-import-status atualiza">Nova revisão de ${escapeHtml(existente.codigo)}</span>`
+            : `<span class="doc-import-status novo">Documento novo</span>`;
         return `
           <tr data-indice="${i}">
             <td>
@@ -553,6 +607,7 @@
               revisao: existente.revisao || '',
               titulo: existente.titulo || '',
               conteudo: existente.conteudo || '',
+              conteudoFormato: existente.conteudoFormato || 'texto',
               obsoletoEm: serverTimestamp()
             });
           }
@@ -562,6 +617,7 @@
             codigo: c.codigo,
             titulo: c.titulo,
             conteudo: c.conteudo,
+            conteudoFormato: c.conteudoFormato || 'html',
             revisao: revisaoFinal,
             atualizadoEm: serverTimestamp(),
             atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
@@ -597,6 +653,7 @@
       document.getElementById('doc-drawer-titulo').textContent = d.titulo || '(sem título)';
       document.getElementById('doc-drawer-subtitulo').textContent = `${d.categoria || ''} · ${d.codigo || ''} · Revisão ${d.revisao || '—'}`;
 
+      const ehHtml = d.conteudoFormato === 'html';
       const corpo = document.getElementById('doc-drawer-corpo');
       corpo.innerHTML = `
         <div class="doc-meta-grid">
@@ -604,7 +661,7 @@
           <div><span class="k">Categoria</span><span class="val">${escapeHtml(d.categoria || '')}</span></div>
           <div><span class="k">Revisão</span><span class="val">${escapeHtml(d.revisao || '—')}</span></div>
         </div>
-        <div class="doc-conteudo-leitura">${escapeHtml(d.conteudo || '(documento ainda sem conteúdo)')}</div>
+        <div class="doc-conteudo-leitura${ehHtml ? ' is-html' : ''}">${renderizarConteudoParaLeitura(d.conteudo, d.conteudoFormato)}</div>
         <div class="doc-form-rodape">
           <div>
             <button type="button" class="qc-btn" id="doc-btn-exportar-pdf"><i class="bi bi-file-earmark-pdf"></i> Exportar em PDF</button>
@@ -628,6 +685,25 @@
     // EXPORTAÇÃO EM PDF — gerada inteiramente no navegador (jsPDF),
     // nada é enviado pra nenhum servidor.
     // ---------------------------------------------------------------
+    function extrairTextoParaPdf(conteudo, formato) {
+      if (formato !== 'html') {
+        return conteudo || '(documento ainda sem conteúdo)';
+      }
+      // O PDF de exportação é só texto (sem negrito/cor/imagem reais) — aqui
+      // a gente converte o HTML rico de volta pra texto corrido, preservando
+      // parágrafos e avisando onde havia imagem, em vez de simplesmente
+      // despejar as tags na tela.
+      const temp = document.createElement('div');
+      temp.innerHTML = sanitizarHtml(conteudo || '');
+      temp.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+      temp.querySelectorAll('img').forEach(img => img.replaceWith('[imagem]'));
+      temp.querySelectorAll('p, div, li, h1, h2, h3, h4, h5, h6').forEach(el => {
+        el.insertAdjacentText('afterend', '\n');
+      });
+      const texto = (temp.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+      return texto || '(documento ainda sem conteúdo)';
+    }
+
     function exportarPdf(d) {
       if (!window.jspdf || !window.jspdf.jsPDF) {
         alert('Não foi possível carregar o gerador de PDF agora. Verifique sua conexão e tente de novo.');
@@ -670,7 +746,7 @@
       pdf.setTextColor(0);
 
       pdf.setFontSize(10.5);
-      const conteudo = d.conteudo || '(documento ainda sem conteúdo)';
+      const conteudo = extrairTextoParaPdf(d.conteudo, d.conteudoFormato);
       const paragrafos = conteudo.split('\n');
       paragrafos.forEach(paragrafo => {
         const linhas = pdf.splitTextToSize(paragrafo === '' ? ' ' : paragrafo, larguraUtil);
@@ -699,10 +775,11 @@
         area.innerHTML = snap.docs.map(docSnap => {
           const v = docSnap.data();
           const data = v.obsoletoEm && v.obsoletoEm.toDate ? v.obsoletoEm.toDate().toLocaleString('pt-BR') : '';
+          const ehHtml = v.conteudoFormato === 'html';
           return `
             <details class="doc-historico-item">
               <summary>Revisão ${escapeHtml(v.revisao || '—')} — tornou-se obsoleta em ${escapeHtml(data)}</summary>
-              <div class="doc-conteudo-leitura">${escapeHtml(v.conteudo || '')}</div>
+              <div class="doc-conteudo-leitura${ehHtml ? ' is-html' : ''}">${renderizarConteudoParaLeitura(v.conteudo, v.conteudoFormato)}</div>
             </details>
           `;
         }).join('');
@@ -753,7 +830,7 @@
             </div>
           </div>
           <label>Conteúdo do documento</label>
-          <textarea id="doc-form-conteudo">${escapeHtml(d ? d.conteudo || '' : '')}</textarea>
+          <div id="doc-form-conteudo-editor"></div>
           <div class="doc-form-rodape">
             <button type="button" class="qc-btn" id="doc-form-cancelar">Cancelar</button>
             <button type="button" class="qc-btn qc-btn-primary" id="doc-form-salvar">
@@ -769,7 +846,65 @@
       document.getElementById('doc-form-cancelar').addEventListener('click', () => (d ? abrirLeitura(id) : fecharDrawer()));
       document.getElementById('doc-form-salvar').addEventListener('click', () => salvarDocumento(id));
 
+      montarEditorDeConteudo(d);
       abrirDrawer();
+    }
+
+    // ---------------------------------------------------------------
+    // EDITOR DE TEXTO RICO (Quill) — negrito, itálico, cor, destacado,
+    // listas e imagem (inserida direto do computador, embutida como
+    // base64, sem precisar de nenhum servidor de upload).
+    // ---------------------------------------------------------------
+    let quillEditor = null;
+
+    function montarEditorDeConteudo(d) {
+      if (!window.Quill) {
+        console.error('Quill não carregou — verifique a conexão.');
+        return;
+      }
+
+      quillEditor = new Quill('#doc-form-conteudo-editor', {
+        theme: 'snow',
+        placeholder: 'Digite ou cole o conteúdo do documento...',
+        modules: {
+          toolbar: [
+            [{ header: [false, 1, 2, 3] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ color: [] }, { background: [] }],
+            [{ list: 'ordered' }, { list: 'bullet' }],
+            ['link', 'image'],
+            ['clean']
+          ]
+        }
+      });
+
+      // Botão de imagem padrão do Quill só pede uma URL — aqui a gente troca
+      // pra abrir o seletor de arquivo do próprio computador.
+      quillEditor.getModule('toolbar').addHandler('image', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.addEventListener('change', () => {
+          const arquivo = input.files && input.files[0];
+          if (!arquivo) return;
+          const leitor = new FileReader();
+          leitor.onload = () => {
+            const range = quillEditor.getSelection(true) || { index: quillEditor.getLength() };
+            quillEditor.insertEmbed(range.index, 'image', leitor.result, 'user');
+            quillEditor.setSelection(range.index + 1);
+          };
+          leitor.readAsDataURL(arquivo);
+        });
+        input.click();
+      });
+
+      if (d && d.conteudo) {
+        if (d.conteudoFormato === 'html') {
+          quillEditor.root.innerHTML = sanitizarHtml(d.conteudo);
+        } else {
+          quillEditor.setText(d.conteudo);
+        }
+      }
     }
 
     async function salvarDocumento(idExistente) {
@@ -779,7 +914,8 @@
       const categoria = proximaCategoriaCustomOuPadrao(categoriaSelect, categoriaOutra);
       const codigo = document.getElementById('doc-form-codigo').value.trim();
       const titulo = document.getElementById('doc-form-titulo').value.trim();
-      const conteudo = document.getElementById('doc-form-conteudo').value;
+      const conteudoVazio = !quillEditor || quillEditor.getText().trim() === '';
+      const conteudo = conteudoVazio ? '' : sanitizarHtml(quillEditor.root.innerHTML);
 
       if (!categoria || !codigo || !titulo) {
         alert('Preencha ao menos categoria, código e título.');
@@ -799,12 +935,14 @@
               revisao: atual.revisao || '',
               titulo: atual.titulo || '',
               conteudo: atual.conteudo || '',
+              conteudoFormato: atual.conteudoFormato || 'texto',
               obsoletoEm: serverTimestamp()
             });
           }
 
           await updateDoc(docRef, {
             categoria, codigo, titulo, conteudo,
+            conteudoFormato: 'html',
             revisao: proximaRevisao(atual ? atual.revisao : '0'),
             atualizadoEm: serverTimestamp(),
             atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
@@ -824,10 +962,12 @@
               revisao: existente.revisao || '',
               titulo: existente.titulo || '',
               conteudo: existente.conteudo || '',
+              conteudoFormato: existente.conteudoFormato || 'texto',
               obsoletoEm: serverTimestamp()
             });
             await updateDoc(docRef, {
               categoria, codigo, titulo, conteudo,
+              conteudoFormato: 'html',
               revisao: proximaRevisao(existente.revisao),
               atualizadoEm: serverTimestamp(),
               atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
@@ -835,6 +975,7 @@
           } else {
             await setDoc(docRef, {
               categoria, codigo, titulo, conteudo,
+              conteudoFormato: 'html',
               revisao: '01',
               atualizadoEm: serverTimestamp(),
               atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
@@ -863,6 +1004,7 @@
       document.getElementById('doc-drawer-overlay').classList.remove('open');
       document.getElementById('doc-drawer').classList.remove('open');
       docEmEdicaoId = null;
+      quillEditor = null;
     }
   </script>
 </body>
