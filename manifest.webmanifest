@@ -1,7 +1,7 @@
 {
-  "name": "Central da Qualidade - Viação Mirim",
+  "name": "Central da Qualidade - MirindoSul",
   "short_name": "Central da Qualidade",
-  "description": "Sistema de gestão da qualidade (SGQ) da Viação Mirim — ações corretivas, indicadores, competências e documentos.",
+  "description": "Sistema de gestão da qualidade (SGQ) da MirindoSul — ações corretivas, indicadores, competências e documentos.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

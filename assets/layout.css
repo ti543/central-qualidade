@@ -134,41 +134,31 @@ body.qc-body {
 #qc-btn-instalar { background: rgba(255,255,255,.15); }
 #qc-btn-instalar:hover { background: rgba(255,255,255,.3); }
 
-/* Botão que recolhe/expande a sidebar no desktop. Fica FORA da .qc-sidebar
-   de propósito: um elemento com position:fixed dentro de um ancestral com
-   transform (como a sidebar recolhida, que usa translateX) passa a ser
-   posicionado em relação a esse ancestral, não à tela — por isso, se esse
-   botão estivesse dentro da sidebar, ele desaparecia junto quando ela
-   recolhia e não dava mais pra clicar nele pra trazer o menu de volta. */
+/* Botão que recolhe/expande a sidebar no desktop. Fica dentro da .qc-main
+   (não fixo, não dentro da sidebar) de propósito: assim ele nunca some —
+   não depende de nenhuma posição fixa que possa colidir com a barra de
+   rolagem da sidebar ou "viajar" junto com ela quando ela é escondida. */
 .qc-sidebar-colapsar {
-  position: fixed;
-  top: 22px;
-  left: calc(var(--qc-sidebar-width) - 15px);
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--qc-primary-dark);
-  border: 2px solid #fff;
-  color: #fff;
-  font-size: 13px;
-  padding: 0;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  background: #fff;
+  border: 1px solid #ddd;
+  color: #555;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0,0,0,.3);
-  z-index: 70;
-  transition: left .25s ease, background .2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+  transition: background .2s, color .2s, border-color .2s;
 }
-.qc-sidebar-colapsar:hover { background: var(--qc-accent); }
+.qc-sidebar-colapsar:hover { background: var(--qc-primary); color: #fff; border-color: var(--qc-primary); }
 
 .qc-main { transition: margin-left .25s ease; }
 body.qc-sidebar-recolhida .qc-sidebar { transform: translateX(-100%); }
 body.qc-sidebar-recolhida .qc-main { margin-left: 0; }
-body.qc-sidebar-recolhida .qc-sidebar-colapsar {
-  left: 14px;
-  background: var(--qc-primary);
-}
 
 /* Hamburger (mobile) */
 .qc-sidebar-toggle {
