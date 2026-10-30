@@ -9,7 +9,10 @@
   <!-- Lê o .docx inteiro no navegador (nada é enviado pra nenhum servidor além
        do conteúdo extraído, que vai pro Firestore igual a edição manual). -->
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.13.0/mammoth.browser.min.js"></script>
-  <!-- Gera o PDF de exportação inteiramente no navegador. -->
+  <!-- Gera o PDF de exportação inteiramente no navegador — html2canvas "fotografa"
+       o conteúdo formatado (negrito, cor, tabelas, imagens) e o jsPDF monta as
+       páginas a partir disso, pra o PDF sair igual ao que aparece na leitura. -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <!-- Editor de texto rico (negrito, cor, imagem) pra digitar/editar documentos
        na mão, e pra exibir o que foi importado do Word com formatação. -->
@@ -126,7 +129,25 @@
     .doc-conteudo-leitura.is-html { white-space: normal; }
     .doc-conteudo-leitura.is-html p, .doc-conteudo-leitura.is-html ul, .doc-conteudo-leitura.is-html ol { margin: 0 0 10px; }
     .doc-conteudo-leitura.is-html img { max-width: 100%; height: auto; border-radius: 4px; display: block; margin: 10px 0; }
-    .doc-conteudo-leitura.is-html h1, .doc-conteudo-leitura.is-html h2, .doc-conteudo-leitura.is-html h3 { color: var(--qc-primary); margin: 14px 0 8px; }
+    /* Mesmo padrão sóbrio usado no título do topo da página (qc-topbar h1) —
+       sem ficar gigante/azulão só porque o Word tinha um "Título 1". */
+    .doc-conteudo-leitura.is-html h1 { font-size: 19px; font-weight: 700; color: var(--qc-primary); margin: 16px 0 8px; letter-spacing: -.01em; }
+    .doc-conteudo-leitura.is-html h2 { font-size: 16px; font-weight: 700; color: var(--qc-primary); margin: 14px 0 7px; }
+    .doc-conteudo-leitura.is-html h3 { font-size: 14px; font-weight: 700; color: var(--qc-primary); margin: 12px 0 6px; }
+    /* Tabelas importadas do Word — o mammoth só traz o texto de cada célula,
+       sem bordas; aqui a gente desenha as bordas pra ficar igual ao Word. */
+    .doc-conteudo-leitura.is-html table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 12.5px; }
+    .doc-conteudo-leitura.is-html table td, .doc-conteudo-leitura.is-html table th { border: 1px solid #ccc; padding: 6px 8px; vertical-align: top; }
+    .doc-conteudo-leitura.is-html table th { background: #eef2ff; font-weight: 700; }
+
+    /* Leitura em tela cheia */
+    .drawer-panel.tela-cheia { width: 100vw; max-width: 100vw; }
+    .drawer-panel.tela-cheia .drawer-body { max-width: 860px; margin: 0 auto; }
+    .doc-aviso-tabela { background: #fff8e1; border: 1px solid #ffe0a3; color: #8a6400; font-size: 12px; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
+
+    /* Opção "cópia controlada" ao lado do botão de exportar PDF */
+    .doc-copia-controlada-opcao { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #555; margin-right: 10px; }
+    .doc-copia-controlada-opcao input { margin: 0; }
 
     .doc-form label { display: block; font-size: 11px; font-weight: bold; color: #666; margin: 12px 0 4px; text-transform: uppercase; }
     .doc-form input[type="text"], .doc-form select, .doc-form textarea {
@@ -216,7 +237,7 @@
       collection, query, orderBy, onSnapshot, doc, setDoc, updateDoc, addDoc,
       getDocs, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-    import { initLayout, escapeHtml } from '../assets/layout.js';
+    import { initLayout, escapeHtml, LOGO_URL } from '../assets/layout.js';
 
     const CATEGORIAS_PADRAO = ['Manual da Qualidade', 'Procedimentos Gerais', 'Instrução de Trabalho', 'Descrição de Funções'];
 
@@ -661,9 +682,13 @@
           <div><span class="k">Categoria</span><span class="val">${escapeHtml(d.categoria || '')}</span></div>
           <div><span class="k">Revisão</span><span class="val">${escapeHtml(d.revisao || '—')}</span></div>
         </div>
+        <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+          <button type="button" class="qc-btn" id="doc-btn-tela-cheia"><i class="bi bi-arrows-fullscreen"></i> Ler em tela cheia</button>
+        </div>
         <div class="doc-conteudo-leitura${ehHtml ? ' is-html' : ''}">${renderizarConteudoParaLeitura(d.conteudo, d.conteudoFormato)}</div>
         <div class="doc-form-rodape">
           <div>
+            <label class="doc-copia-controlada-opcao"><input type="checkbox" id="doc-chk-copia-controlada"> Cópia controlada</label>
             <button type="button" class="qc-btn" id="doc-btn-exportar-pdf"><i class="bi bi-file-earmark-pdf"></i> Exportar em PDF</button>
             ${podeEditar ? `<button type="button" class="qc-btn" id="doc-btn-historico">Ver revisões anteriores</button>` : ''}
           </div>
@@ -673,6 +698,7 @@
       `;
 
       document.getElementById('doc-btn-exportar-pdf').addEventListener('click', () => exportarPdf(d));
+      document.getElementById('doc-btn-tela-cheia').addEventListener('click', alternarTelaCheia);
       if (podeEditar) {
         document.getElementById('doc-btn-editar-do-drawer').addEventListener('click', () => abrirEdicao(id));
         document.getElementById('doc-btn-historico').addEventListener('click', () => carregarHistorico(id));
@@ -682,84 +708,153 @@
     }
 
     // ---------------------------------------------------------------
-    // EXPORTAÇÃO EM PDF — gerada inteiramente no navegador (jsPDF),
-    // nada é enviado pra nenhum servidor.
+    // LEITURA EM TELA CHEIA — expande o painel lateral pra ocupar toda a
+    // largura da tela, útil pra ler documentos grandes com mais conforto.
     // ---------------------------------------------------------------
-    function extrairTextoParaPdf(conteudo, formato) {
-      if (formato !== 'html') {
-        return conteudo || '(documento ainda sem conteúdo)';
+    function alternarTelaCheia() {
+      const painel = document.getElementById('doc-drawer');
+      const btn = document.getElementById('doc-btn-tela-cheia');
+      const agoraTelaCheia = painel.classList.toggle('tela-cheia');
+      if (btn) {
+        btn.innerHTML = agoraTelaCheia
+          ? '<i class="bi bi-fullscreen-exit"></i> Sair da tela cheia'
+          : '<i class="bi bi-arrows-fullscreen"></i> Ler em tela cheia';
       }
-      // O PDF de exportação é só texto (sem negrito/cor/imagem reais) — aqui
-      // a gente converte o HTML rico de volta pra texto corrido, preservando
-      // parágrafos e avisando onde havia imagem, em vez de simplesmente
-      // despejar as tags na tela.
-      const temp = document.createElement('div');
-      temp.innerHTML = sanitizarHtml(conteudo || '');
-      temp.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
-      temp.querySelectorAll('img').forEach(img => img.replaceWith('[imagem]'));
-      temp.querySelectorAll('p, div, li, h1, h2, h3, h4, h5, h6').forEach(el => {
-        el.insertAdjacentText('afterend', '\n');
-      });
-      const texto = (temp.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
-      return texto || '(documento ainda sem conteúdo)';
     }
 
-    function exportarPdf(d) {
-      if (!window.jspdf || !window.jspdf.jsPDF) {
+    // ---------------------------------------------------------------
+    // EXPORTAÇÃO EM PDF — gerada inteiramente no navegador. O html2canvas
+    // "fotografa" o próprio conteúdo formatado (o mesmo HTML da leitura:
+    // negrito, cor, tabelas, imagens) e o jsPDF monta as páginas a partir
+    // disso — por isso o PDF sai igual ao que aparece na tela. Depois,
+    // escrevemos a logo, o número da página e (se marcado) "cópia
+    // controlada" em cada página.
+    // ---------------------------------------------------------------
+    let logoParaPdfCache = null; // null = ainda não tentou, false = tentou e falhou (CORS/rede)
+
+    async function carregarLogoParaPdf() {
+      if (logoParaPdfCache !== null) return logoParaPdfCache;
+      try {
+        const resp = await fetch(LOGO_URL, { mode: 'cors' });
+        if (!resp.ok) throw new Error('status ' + resp.status);
+        const blob = await resp.blob();
+        logoParaPdfCache = await new Promise((resolve, reject) => {
+          const leitor = new FileReader();
+          leitor.onload = () => resolve(leitor.result);
+          leitor.onerror = reject;
+          leitor.readAsDataURL(blob);
+        });
+      } catch (err) {
+        console.warn('Não consegui carregar a logo pro cabeçalho do PDF (o site da logo pode não liberar CORS):', err);
+        logoParaPdfCache = false;
+      }
+      return logoParaPdfCache;
+    }
+
+    async function exportarPdf(d) {
+      if (!window.jspdf || !window.jspdf.jsPDF || !window.html2canvas) {
         alert('Não foi possível carregar o gerador de PDF agora. Verifique sua conexão e tente de novo.');
         return;
       }
 
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
-      const margemEsq = 50;
-      const margemDir = 50;
-      const larguraUtil = pdf.internal.pageSize.getWidth() - margemEsq - margemDir;
-      const alturaPagina = pdf.internal.pageSize.getHeight();
-      let y = 55;
-
-      function quebraDePaginaSeNecessario(proximaAltura) {
-        if (y + proximaAltura > alturaPagina - 45) {
-          pdf.addPage();
-          y = 55;
-        }
+      const btnExportar = document.getElementById('doc-btn-exportar-pdf');
+      const copiaControlada = !!document.getElementById('doc-chk-copia-controlada')?.checked;
+      const textoOriginalBtn = btnExportar ? btnExportar.innerHTML : '';
+      if (btnExportar) {
+        btnExportar.disabled = true;
+        btnExportar.innerHTML = '<i class="bi bi-hourglass-split"></i> Gerando PDF...';
       }
 
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(14);
-      pdf.text(d.codigo || '', margemEsq, y);
-      y += 20;
-      pdf.setFontSize(13);
-      const linhasTitulo = pdf.splitTextToSize(d.titulo || '(sem título)', larguraUtil);
-      pdf.text(linhasTitulo, margemEsq, y);
-      y += linhasTitulo.length * 16 + 6;
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+      const larguraPagina = pdf.internal.pageSize.getWidth();
+      const alturaPagina = pdf.internal.pageSize.getHeight();
+      const margemLateral = 40;
+      const margemSuperior = 85; // espaço reservado pra logo
+      const margemInferior = 50; // espaço reservado pro rodapé
 
-      pdf.setDrawColor(180);
-      pdf.line(margemEsq, y, margemEsq + larguraUtil, y);
-      y += 16;
+      // Monta, fora da tela, o mesmo bloco de conteúdo exibido na leitura —
+      // mesmas classes CSS (doc-conteudo-leitura.is-html), então tabelas,
+      // negrito, cor e imagens saem exatamente como no sistema.
+      const ehHtml = d.conteudoFormato === 'html';
+      const container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.width = '700px';
+      container.style.background = '#fff';
+      container.style.boxSizing = 'border-box';
+      container.innerHTML = `
+        <div style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
+          <h2 style="margin:0 0 4px;font-size:16px;color:#000080;">${escapeHtml(d.codigo || '')} — ${escapeHtml(d.titulo || '(sem título)')}</h2>
+          <p style="margin:0 0 16px;font-size:11px;color:#666;">Categoria: ${escapeHtml(d.categoria || '—')} &nbsp;&nbsp; Revisão: ${escapeHtml(d.revisao || '—')}</p>
+          <div class="doc-conteudo-leitura${ehHtml ? ' is-html' : ''}" style="border:none;padding:0;min-height:0;">
+            ${renderizarConteudoParaLeitura(d.conteudo, d.conteudoFormato)}
+          </div>
+        </div>
+      `;
+      document.body.appendChild(container);
 
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(9.5);
-      pdf.setTextColor(90);
-      pdf.text(`Categoria: ${d.categoria || '—'}      Revisão: ${d.revisao || '—'}`, margemEsq, y);
-      y += 24;
-      pdf.setTextColor(0);
+      try {
+        await carregarLogoParaPdf(); // carrega/cacheia antes (não é usado nesta etapa)
 
-      pdf.setFontSize(10.5);
-      const conteudo = extrairTextoParaPdf(d.conteudo, d.conteudoFormato);
-      const paragrafos = conteudo.split('\n');
-      paragrafos.forEach(paragrafo => {
-        const linhas = pdf.splitTextToSize(paragrafo === '' ? ' ' : paragrafo, larguraUtil);
-        linhas.forEach(linha => {
-          quebraDePaginaSeNecessario(14);
-          pdf.text(linha, margemEsq, y);
-          y += 14;
+        await new Promise((resolve, reject) => {
+          try {
+            pdf.html(container, {
+              x: margemLateral,
+              y: margemSuperior,
+              width: larguraPagina - margemLateral * 2,
+              windowWidth: 700,
+              margin: [margemSuperior, margemLateral, margemInferior, margemLateral],
+              autoPaging: 'text',
+              html2canvas: { useCORS: true },
+              callback: () => resolve()
+            });
+          } catch (errSync) {
+            reject(errSync);
+          }
         });
-      });
+      } catch (err) {
+        console.error('Erro ao gerar PDF:', err);
+        alert('Não foi possível gerar o PDF agora.');
+        container.remove();
+        if (btnExportar) { btnExportar.disabled = false; btnExportar.innerHTML = textoOriginalBtn; }
+        return;
+      }
+
+      container.remove();
+
+      // Cabeçalho (logo) e rodapé (nº de página / cópia controlada) em
+      // TODAS as páginas geradas.
+      const logo = await carregarLogoParaPdf();
+      const totalPaginas = pdf.internal.getNumberOfPages();
+      for (let p = 1; p <= totalPaginas; p++) {
+        pdf.setPage(p);
+
+        if (logo) {
+          try { pdf.addImage(logo, 'PNG', margemLateral, 18, 68, 26, undefined, 'FAST'); } catch (e) { /* ignora falha pontual de imagem */ }
+        }
+        pdf.setDrawColor(210);
+        pdf.line(margemLateral, 54, larguraPagina - margemLateral, 54);
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        pdf.setTextColor(120);
+        pdf.text(`Página ${p} de ${totalPaginas}`, larguraPagina - margemLateral, alturaPagina - 20, { align: 'right' });
+
+        if (copiaControlada) {
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(180, 0, 0);
+          pdf.text('CÓPIA CONTROLADA', margemLateral, alturaPagina - 20);
+        }
+        pdf.setTextColor(0);
+      }
 
       const nomeArquivo = `${(d.codigo || 'documento').trim()} - ${(d.titulo || '').trim()} rev ${d.revisao || '00'}.pdf`
         .replace(/[\\/:*?"<>|]+/g, '-');
       pdf.save(nomeArquivo);
+
+      if (btnExportar) { btnExportar.disabled = false; btnExportar.innerHTML = textoOriginalBtn; }
     }
 
     async function carregarHistorico(id) {
@@ -830,6 +925,7 @@
             </div>
           </div>
           <label>Conteúdo do documento</label>
+          <div id="doc-form-aviso-tabela"></div>
           <div id="doc-form-conteudo-editor"></div>
           <div class="doc-form-rodape">
             <button type="button" class="qc-btn" id="doc-form-cancelar">Cancelar</button>
@@ -900,6 +996,15 @@
 
       if (d && d.conteudo) {
         if (d.conteudoFormato === 'html') {
+          // O editor (Quill) não entende tabela — se o conteúdo importado do
+          // Word tiver uma, avisa antes de deixar editar, pra não perder a
+          // formatação da tabela sem querer.
+          if (/<table/i.test(d.conteudo)) {
+            const aviso = document.getElementById('doc-form-aviso-tabela');
+            if (aviso) {
+              aviso.innerHTML = `<div class="doc-aviso-tabela"><i class="bi bi-exclamation-triangle"></i> Este documento tem uma tabela importada do Word. O editor aqui não consegue manter tabelas — se você salvar depois de editar, a tabela pode virar texto solto. Se só precisa corrigir um texto pequeno, considere reimportar o Word em vez de editar aqui.</div>`;
+            }
+          }
           quillEditor.root.innerHTML = sanitizarHtml(d.conteudo);
         } else {
           quillEditor.setText(d.conteudo);
@@ -1002,7 +1107,7 @@
 
     function fecharDrawer() {
       document.getElementById('doc-drawer-overlay').classList.remove('open');
-      document.getElementById('doc-drawer').classList.remove('open');
+      document.getElementById('doc-drawer').classList.remove('open', 'tela-cheia');
       docEmEdicaoId = null;
       quillEditor = null;
     }

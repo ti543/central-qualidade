@@ -51,6 +51,9 @@ export function garantirEsqueleto({ homeHref }) {
     <div id="qc-app">
       <div class="qc-shell">
         <aside class="qc-sidebar" id="qc-sidebar">
+          <button type="button" class="qc-sidebar-colapsar" id="qc-sidebar-colapsar" title="Recolher menu">
+            <i class="bi bi-chevron-left"></i>
+          </button>
           <div class="qc-sidebar-logo">
             <img src="${LOGO_URL}" alt="Viação Mirim">
             <span>Central da<br>Qualidade</span>
@@ -58,6 +61,7 @@ export function garantirEsqueleto({ homeHref }) {
           <nav class="qc-sidebar-nav" id="qc-sidebar-nav"></nav>
           <div class="qc-sidebar-footer">
             <span class="qc-usuario-badge" id="qc-usuario-badge">---</span>
+            <button id="qc-btn-instalar" type="button" style="display:none;"><i class="bi bi-download"></i> Instalar app</button>
             <button id="qc-btn-sair" type="button"><i class="bi bi-power"></i> Sair</button>
           </div>
         </aside>
@@ -73,6 +77,90 @@ export function garantirEsqueleto({ homeHref }) {
   document.getElementById('qc-sidebar-toggle').addEventListener('click', () => {
     document.getElementById('qc-sidebar').classList.toggle('qc-aberta');
   });
+
+  ligarBotaoColapsarSidebar();
+  ligarInstalarPwa();
+}
+
+/**
+ * Botão "Instalar app" na sidebar — o site já é um PWA instalável (tem
+ * manifest.webmanifest + sw.js), mas o navegador costuma escondendo esse
+ * atalho num menu que quase ninguém acha. Isso aqui captura o aviso do
+ * Chrome/Edge/Android e deixa um botão visível e explícito.
+ *
+ * iOS (Safari/iPhone/iPad) não tem esse evento — lá não existe instalação
+ * automática, então mostramos o botão sempre (quando ainda não instalado)
+ * e, ao clicar, explicamos o caminho manual (Compartilhar > Adicionar à
+ * Tela de Início).
+ */
+let _promptDeInstalacao = null;
+
+function ligarInstalarPwa() {
+  const btn = document.getElementById('qc-btn-instalar');
+  if (!btn || btn.dataset.qcBound) return;
+  btn.dataset.qcBound = '1';
+
+  const jaInstalado = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const ehIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+
+  if (jaInstalado) {
+    btn.style.display = 'none';
+  } else if (ehIOS) {
+    btn.style.display = 'flex';
+  }
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    _promptDeInstalacao = e;
+    if (!jaInstalado) btn.style.display = 'flex';
+  });
+
+  window.addEventListener('appinstalled', () => {
+    _promptDeInstalacao = null;
+    btn.style.display = 'none';
+  });
+
+  btn.addEventListener('click', async () => {
+    if (_promptDeInstalacao) {
+      _promptDeInstalacao.prompt();
+      await _promptDeInstalacao.userChoice;
+      _promptDeInstalacao = null;
+      return;
+    }
+    if (ehIOS) {
+      alert('Pra instalar no iPhone/iPad: toque no ícone de compartilhar (o quadrado com a seta pra cima, na barra do Safari) e escolha "Adicionar à Tela de Início".');
+    } else {
+      alert('Seu navegador ainda não liberou a instalação automática. No Chrome ou Edge, procure o ícone de instalação na barra de endereço (geralmente perto do favorito ⭐).');
+    }
+  });
+}
+
+/**
+ * Botão que recolhe/expande a sidebar no desktop, pra ganhar espaço de
+ * leitura (útil pra ler documentos grandes, por exemplo). O estado fica
+ * guardado no navegador, então a escolha se mantém ao trocar de página.
+ */
+function ligarBotaoColapsarSidebar() {
+  const btn = document.getElementById('qc-sidebar-colapsar');
+  if (!btn) return;
+
+  let recolhida = false;
+  try { recolhida = localStorage.getItem('qc-sidebar-recolhida') === '1'; } catch (e) { /* ignora */ }
+  if (recolhida) document.body.classList.add('qc-sidebar-recolhida');
+  atualizarIconeColapsar(btn);
+
+  btn.addEventListener('click', () => {
+    const agoraRecolhida = document.body.classList.toggle('qc-sidebar-recolhida');
+    try { localStorage.setItem('qc-sidebar-recolhida', agoraRecolhida ? '1' : '0'); } catch (e) { /* ignora */ }
+    atualizarIconeColapsar(btn);
+  });
+}
+
+function atualizarIconeColapsar(btn) {
+  const estaRecolhida = document.body.classList.contains('qc-sidebar-recolhida');
+  const icone = btn.querySelector('i');
+  if (icone) icone.className = estaRecolhida ? 'bi bi-chevron-right' : 'bi bi-chevron-left';
+  btn.title = estaRecolhida ? 'Mostrar menu' : 'Recolher menu';
 }
 
 function montarSidebarNav(modulos, activeSlug, souQualidade, homeHref) {

@@ -127,10 +127,45 @@ body.qc-body {
 .qc-sidebar-link.active { background: rgba(255,255,255,.14); color: #fff; border-left-color: var(--qc-accent); font-weight: 700; }
 .qc-sidebar-link .bi { font-size: 15px; width: 18px; text-align: center; }
 
-.qc-sidebar-footer { padding: 14px 18px; border-top: 1px solid rgba(255,255,255,.15); flex-shrink: 0; }
-.qc-sidebar-footer .qc-usuario-badge { display:block; width:100%; text-align:center; background: rgba(255,255,255,.15); color:#fff; padding:6px 10px; border-radius:20px; font-size:10.5px; font-weight:700; text-transform:uppercase; margin-bottom:8px; }
-.qc-sidebar-footer button { width:100%; background: rgba(217,35,35,.85); border:none; color:#fff; padding:8px 10px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; transition:background .2s; }
+.qc-sidebar-footer { padding: 14px 18px; border-top: 1px solid rgba(255,255,255,.15); flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+.qc-sidebar-footer .qc-usuario-badge { display:block; width:100%; text-align:center; background: rgba(255,255,255,.15); color:#fff; padding:6px 10px; border-radius:20px; font-size:10.5px; font-weight:700; text-transform:uppercase; margin-bottom:0; }
+.qc-sidebar-footer button { width:100%; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(217,35,35,.85); border:none; color:#fff; padding:8px 10px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; transition:background .2s; }
 .qc-sidebar-footer button:hover { background: var(--qc-accent); }
+#qc-btn-instalar { background: rgba(255,255,255,.15); }
+#qc-btn-instalar:hover { background: rgba(255,255,255,.3); }
+
+/* Botão que recolhe/expande a sidebar no desktop */
+.qc-sidebar-colapsar {
+  position: absolute;
+  top: 24px;
+  right: -13px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--qc-primary-dark);
+  border: 2px solid rgba(255,255,255,.3);
+  color: #fff;
+  font-size: 12px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 55;
+  transition: background .2s;
+}
+.qc-sidebar-colapsar:hover { background: var(--qc-accent); }
+
+.qc-main { transition: margin-left .25s ease; }
+body.qc-sidebar-recolhida .qc-sidebar { transform: translateX(-100%); }
+body.qc-sidebar-recolhida .qc-main { margin-left: 0; }
+body.qc-sidebar-recolhida .qc-sidebar-colapsar {
+  position: fixed;
+  top: 24px;
+  left: 14px;
+  right: auto;
+  background: var(--qc-primary);
+}
 
 /* Hamburger (mobile) */
 .qc-sidebar-toggle {
@@ -259,4 +294,8 @@ body.qc-body {
   .qc-sidebar.qc-aberta { transform: translateX(0); }
   .qc-main { margin-left: 0; padding: 60px 16px 40px; }
   .qc-sidebar-toggle { display: block; }
+  /* No celular já existe o hamburger pra abrir/fechar — o botão de
+     recolher é coisa de tela grande, pra não confundir com dois controles
+     fazendo quase a mesma coisa. */
+  .qc-sidebar-colapsar { display: none; }
 }
