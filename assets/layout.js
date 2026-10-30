@@ -79,6 +79,14 @@ function montarSidebarNav(modulos, activeSlug, souQualidade, homeHref) {
   const nav = document.getElementById('qc-sidebar-nav');
   if (!nav) return;
 
+  // homeHref é relativo à página atual: './index.html' quando já estamos
+  // na raiz (index.html) e '../index.html' quando estamos dentro de
+  // web/modulos/*.html. Os links dos módulos têm que respeitar isso — senão,
+  // clicar num módulo de dentro de outro módulo monta "modulos/modulos/..."
+  // e dá 404 no GitHub Pages.
+  const dentroDeModulo = homeHref.indexOf('..') === 0;
+  const baseModulos = dentroDeModulo ? '' : 'modulos/';
+
   let html = `
     <a class="qc-sidebar-link ${!activeSlug ? 'active' : ''}" href="${homeHref}">
       <i class="bi bi-house-door-fill"></i> Início
@@ -87,7 +95,7 @@ function montarSidebarNav(modulos, activeSlug, souQualidade, homeHref) {
   `;
 
   html += modulos.map(m => `
-    <a class="qc-sidebar-link ${m.slug === activeSlug ? 'active' : ''}" href="${escapeHtml(m.hrefOverride || ('modulos/' + m.slug + '.html'))}">
+    <a class="qc-sidebar-link ${m.slug === activeSlug ? 'active' : ''}" href="${escapeHtml(m.hrefOverride || (baseModulos + m.slug + '.html'))}">
       <i class="bi ${iconeDoModulo(m.slug)}"></i> ${escapeHtml(m.nome)}
     </a>
   `).join('');

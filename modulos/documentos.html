@@ -6,6 +6,11 @@
   <title>Biblioteca de Documentos</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link href="../assets/layout.css" rel="stylesheet">
+  <!-- Lê o .docx inteiro no navegador (nada é enviado pra nenhum servidor além
+       do texto extraído, que vai pro Firestore igual a edição manual). -->
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.13.0/mammoth.browser.min.js"></script>
+  <!-- Gera o PDF de exportação inteiramente no navegador. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     /* Estilos específicos deste módulo. O resto (sidebar, topbar, cards,
        botões, seções) vem de assets/layout.css. */
@@ -124,6 +129,24 @@
     .doc-historico-item summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--qc-primary); }
     .doc-historico-item .doc-conteudo-leitura { margin-top: 10px; font-size: 12.5px; }
     .doc-aviso-historico-vazio { color: #888; font-size: 12.5px; padding: 10px; }
+
+    /* IMPORTAÇÃO EM LOTE A PARTIR DE ARQUIVOS .DOCX */
+    .doc-import-tabela { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .doc-import-tabela th {
+      background: var(--qc-primary); color: #fff; text-align: left; padding: 7px 8px; font-size: 11px; text-transform: uppercase;
+    }
+    .doc-import-tabela td { padding: 5px 8px; border-bottom: 1px solid #eee; vertical-align: middle; }
+    .doc-import-tabela input, .doc-import-tabela select {
+      width: 100%; padding: 5px 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; font-family: inherit;
+    }
+    .doc-import-tabela .doc-import-arquivo { font-size: 11px; color: #888; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .doc-import-tabela .doc-import-status { font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .doc-import-tabela .doc-import-status.novo { color: #006100; }
+    .doc-import-tabela .doc-import-status.atualiza { color: #9c6500; }
+    .doc-import-tabela .doc-import-remover { color: #9c0006; cursor: pointer; background: none; border: none; font-size: 15px; }
+    .doc-import-rodape { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: 10px; flex-wrap: wrap; }
+    .doc-import-aviso-ignorados { font-size: 12px; color: #9c6500; margin-top: 10px; }
+    .doc-import-progresso { font-size: 12.5px; color: #555; }
   </style>
 </head>
 <body class="qc-body">
@@ -135,10 +158,16 @@
         <i class="bi bi-search"></i>
         <input type="text" id="doc-busca-input" placeholder="Buscar por código ou título (ex: PG 04, Ações corretivas...)">
       </div>
+      <button type="button" class="qc-btn edit-only" id="doc-btn-importar" style="display:none;">
+        <i class="bi bi-file-earmark-word"></i> Importar do Word
+      </button>
       <button type="button" class="qc-btn qc-btn-primary edit-only" id="doc-btn-novo" style="display:none;">
         <i class="bi bi-plus-lg"></i> Novo documento
       </button>
+      <input type="file" id="doc-import-input" accept=".docx" multiple style="display:none;">
     </div>
+
+    <div id="doc-importacao-area"></div>
 
     <div id="doc-estado-carregando" class="qc-aviso-vazio">Carregando documentos...</div>
     <div id="doc-estado-erro" class="qc-aviso-vazio">Não foi possível carregar a biblioteca agora. Tente recarregar a página.</div>
@@ -181,6 +210,9 @@
       activeSlug: 'documentos',
       pageTitle: 'Biblioteca de Documentos',
       breadcrumb: 'Qualidade',
+      isoDocId: 'documentos',
+      isoCollection: 'modulo_config',
+      isoEditLevel: 'qualidade',
       homeHref: '../index.html'
     }).then(({ perfil, souQualidade }) => {
       perfilAtual = perfil;
@@ -189,6 +221,12 @@
 
       document.getElementById('doc-busca-input').addEventListener('input', renderizarBiblioteca);
       document.getElementById('doc-btn-novo').addEventListener('click', () => abrirEdicao(null));
+      document.getElementById('doc-btn-importar').addEventListener('click', () => document.getElementById('doc-import-input').click());
+      document.getElementById('doc-import-input').addEventListener('change', (e) => {
+        const arquivos = Array.from(e.target.files || []);
+        e.target.value = ''; // permite selecionar os mesmos arquivos de novo depois
+        if (arquivos.length) processarImportacao(arquivos);
+      });
       document.getElementById('doc-drawer-fechar').addEventListener('click', fecharDrawer);
       document.getElementById('doc-drawer-overlay').addEventListener('click', fecharDrawer);
 
@@ -297,6 +335,259 @@
     }
 
     // ---------------------------------------------------------------
+    // IMPORTAÇÃO EM LOTE A PARTIR DE ARQUIVOS .DOCX
+    // Lê o arquivo inteiro no navegador (mammoth.js) — nada é enviado
+    // pra nenhum servidor. Só o texto extraído vai pro Firestore quando
+    // o usuário confirma a importação.
+    // ---------------------------------------------------------------
+    const PADRAO_NOME_ARQUIVO = /^(?<codigo>[A-Za-zÀ-ÿ]{1,4}\s?\d{0,3})\s*-\s*(?<resto>.+)$/;
+    const PADRAO_REVISAO_ARQUIVO = /\s+rev\.?\s*(\d{1,3})\s*$/i;
+    const CATEGORIA_POR_PREFIXO = {
+      'PG': 'Procedimentos Gerais',
+      'IT': 'Instrução de Trabalho',
+      'DF': 'Descrição de Funções',
+      'MQ': 'Manual da Qualidade'
+    };
+
+    let listaImportacao = [];
+
+    function interpretarNomeArquivo(nomeSemExtensao) {
+      if (/teste|rascunho/i.test(nomeSemExtensao)) return null;
+      const m = PADRAO_NOME_ARQUIVO.exec(nomeSemExtensao.trim());
+      if (!m) return null;
+
+      const codigo = m.groups.codigo.replace(/\s+/g, ' ').trim().toUpperCase();
+      const resto = m.groups.resto.trim();
+      const revMatch = PADRAO_REVISAO_ARQUIVO.exec(resto);
+      let revisao = 0;
+      let titulo = resto;
+      if (revMatch) {
+        revisao = parseInt(revMatch[1], 10);
+        titulo = resto.slice(0, revMatch.index).trim();
+      }
+      return { codigo, titulo, revisao };
+    }
+
+    function categoriaPorPrefixo(codigo) {
+      const prefixo = (codigo.split(' ')[0] || '').toUpperCase();
+      return CATEGORIA_POR_PREFIXO[prefixo] || '';
+    }
+
+    async function processarImportacao(arquivos) {
+      const area = document.getElementById('doc-importacao-area');
+      area.innerHTML = `<div class="qc-card"><div class="doc-import-progresso" id="doc-import-progresso">Lendo arquivos...</div></div>`;
+
+      const candidatosPorChave = {};
+      const ignorados = [];
+
+      for (let i = 0; i < arquivos.length; i++) {
+        const arquivo = arquivos[i];
+        const progresso = document.getElementById('doc-import-progresso');
+        if (progresso) progresso.textContent = `Lendo ${i + 1} de ${arquivos.length}: ${arquivo.name}`;
+
+        const nomeSemExt = arquivo.name.replace(/\.docx?$/i, '');
+        const interpretado = interpretarNomeArquivo(nomeSemExt);
+        if (!interpretado) {
+          ignorados.push(arquivo.name);
+          continue;
+        }
+
+        let texto = '';
+        try {
+          const buf = await arquivo.arrayBuffer();
+          const resultado = await mammoth.extractRawText({ arrayBuffer: buf });
+          texto = resultado.value || '';
+        } catch (err) {
+          console.error('Erro ao ler', arquivo.name, err);
+          ignorados.push(`${arquivo.name} (não consegui ler o conteúdo)`);
+          continue;
+        }
+
+        const categoria = categoriaPorPrefixo(interpretado.codigo);
+        const chave = `${slugificar(categoria)}--${slugificar(interpretado.codigo)}`;
+        const candidato = {
+          chave,
+          categoria,
+          codigo: interpretado.codigo,
+          titulo: interpretado.titulo,
+          revisao: interpretado.revisao,
+          conteudo: texto,
+          nomeArquivo: arquivo.name
+        };
+
+        // Se dois arquivos selecionados caem no mesmo código, fica só a
+        // revisão mais alta (mesma lógica de quando se busca a pasta inteira).
+        if (!candidatosPorChave[chave] || candidato.revisao > candidatosPorChave[chave].revisao) {
+          candidatosPorChave[chave] = candidato;
+        }
+      }
+
+      listaImportacao = Object.values(candidatosPorChave);
+      renderizarRevisaoImportacao(ignorados);
+    }
+
+    function renderizarRevisaoImportacao(ignorados) {
+      const area = document.getElementById('doc-importacao-area');
+
+      if (!listaImportacao.length) {
+        area.innerHTML = `
+          <div class="qc-card">
+            <div class="qc-section-title">Importação</div>
+            <p class="doc-aviso-historico-vazio">Nenhum arquivo reconhecido. Os nomes precisam seguir o padrão "CÓDIGO - Título rev.NN.docx" (ex: "PG 04 - Ações corretivas e preventivas rev.03.docx").</p>
+          </div>
+        `;
+        return;
+      }
+
+      area.innerHTML = `
+        <div class="qc-card">
+          <div class="qc-section-title">Revise antes de importar (${listaImportacao.length} documento(s))</div>
+          <div class="table-responsive" style="overflow-x:auto;">
+            <table class="doc-import-tabela">
+              <thead>
+                <tr>
+                  <th style="width:18%;">Categoria</th>
+                  <th style="width:10%;">Código</th>
+                  <th>Título</th>
+                  <th style="width:8%;">Revisão</th>
+                  <th style="width:12%;">Situação</th>
+                  <th style="width:18%;">Arquivo</th>
+                  <th style="width:4%;"></th>
+                </tr>
+              </thead>
+              <tbody id="doc-import-tbody"></tbody>
+            </table>
+          </div>
+          ${ignorados && ignorados.length ? `
+            <div class="doc-import-aviso-ignorados">
+              <i class="bi bi-exclamation-triangle"></i> ${ignorados.length} arquivo(s) ignorado(s) (nome fora do padrão ou arquivo de teste):
+              <br>${ignorados.map(n => escapeHtml(n)).join('<br>')}
+            </div>
+          ` : ''}
+          <div class="doc-import-rodape">
+            <button type="button" class="qc-btn" id="doc-import-cancelar">Cancelar</button>
+            <button type="button" class="qc-btn qc-btn-primary" id="doc-import-confirmar">
+              <i class="bi bi-cloud-upload"></i> Importar ${listaImportacao.length} documento(s)
+            </button>
+          </div>
+        </div>
+      `;
+
+      renderizarLinhasImportacao();
+      document.getElementById('doc-import-cancelar').addEventListener('click', () => {
+        listaImportacao = [];
+        document.getElementById('doc-importacao-area').innerHTML = '';
+      });
+      document.getElementById('doc-import-confirmar').addEventListener('click', confirmarImportacao);
+    }
+
+    function renderizarLinhasImportacao() {
+      const tbody = document.getElementById('doc-import-tbody');
+      tbody.innerHTML = listaImportacao.map((c, i) => {
+        const existente = documentosCarregados.find(d => d.id === c.chave);
+        const situacao = existente
+          ? `<span class="doc-import-status atualiza">Nova revisão de ${escapeHtml(existente.codigo)}</span>`
+          : `<span class="doc-import-status novo">Documento novo</span>`;
+        return `
+          <tr data-indice="${i}">
+            <td>
+              <select class="doc-import-campo" data-campo="categoria" data-indice="${i}">
+                ${CATEGORIAS_PADRAO.map(cat => `<option value="${escapeHtml(cat)}" ${cat === c.categoria ? 'selected' : ''}>${escapeHtml(cat)}</option>`).join('')}
+                <option value="${escapeHtml(c.categoria)}" ${!CATEGORIAS_PADRAO.includes(c.categoria) ? 'selected' : ''} ${CATEGORIAS_PADRAO.includes(c.categoria) ? 'style="display:none;"' : ''}>${escapeHtml(c.categoria || '(defina a categoria)')}</option>
+              </select>
+            </td>
+            <td><input type="text" class="doc-import-campo" data-campo="codigo" data-indice="${i}" value="${escapeHtml(c.codigo)}"></td>
+            <td><input type="text" class="doc-import-campo" data-campo="titulo" data-indice="${i}" value="${escapeHtml(c.titulo)}"></td>
+            <td><input type="text" class="doc-import-campo" data-campo="revisao" data-indice="${i}" value="${c.revisao ? String(c.revisao).padStart(2, '0') : ''}"></td>
+            <td>${situacao}</td>
+            <td class="doc-import-arquivo" title="${escapeHtml(c.nomeArquivo)}">${escapeHtml(c.nomeArquivo)}</td>
+            <td><button type="button" class="doc-import-remover" data-remover="${i}" title="Remover da lista">✕</button></td>
+          </tr>
+        `;
+      }).join('');
+
+      tbody.querySelectorAll('.doc-import-campo').forEach(el => {
+        el.addEventListener('change', (e) => {
+          const i = parseInt(e.target.dataset.indice, 10);
+          const campo = e.target.dataset.campo;
+          listaImportacao[i][campo] = e.target.value;
+        });
+      });
+      tbody.querySelectorAll('[data-remover]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const i = parseInt(e.target.dataset.remover, 10);
+          listaImportacao.splice(i, 1);
+          if (!listaImportacao.length) {
+            document.getElementById('doc-importacao-area').innerHTML = '';
+          } else {
+            renderizarRevisaoImportacao();
+          }
+        });
+      });
+    }
+
+    async function confirmarImportacao() {
+      const btn = document.getElementById('doc-import-confirmar');
+      btn.disabled = true;
+
+      let ok = 0;
+      const falhas = [];
+
+      for (let i = 0; i < listaImportacao.length; i++) {
+        const c = listaImportacao[i];
+        btn.innerHTML = `<i class="bi bi-hourglass-split"></i> Importando ${i + 1} de ${listaImportacao.length}...`;
+
+        if (!c.categoria || !c.codigo || !c.titulo) {
+          falhas.push(`${c.nomeArquivo} (faltou categoria, código ou título)`);
+          continue;
+        }
+
+        try {
+          const chave = `${slugificar(c.categoria)}--${slugificar(c.codigo)}`;
+          const docRef = doc(db, 'biblioteca_documentos', chave);
+          const existente = documentosCarregados.find(d => d.id === chave);
+          const revisaoFinal = c.revisao ? String(c.revisao).padStart(2, '0') : '';
+
+          if (existente) {
+            await addDoc(collection(docRef, 'versoes_obsoletas'), {
+              revisao: existente.revisao || '',
+              titulo: existente.titulo || '',
+              conteudo: existente.conteudo || '',
+              obsoletoEm: serverTimestamp()
+            });
+          }
+
+          await setDoc(docRef, {
+            categoria: c.categoria,
+            codigo: c.codigo,
+            titulo: c.titulo,
+            conteudo: c.conteudo,
+            revisao: revisaoFinal,
+            atualizadoEm: serverTimestamp(),
+            atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
+          });
+
+          ok++;
+        } catch (err) {
+          console.error('Erro ao importar', c.nomeArquivo, err);
+          falhas.push(c.nomeArquivo);
+        }
+      }
+
+      listaImportacao = [];
+      const area = document.getElementById('doc-importacao-area');
+      area.innerHTML = `
+        <div class="qc-card">
+          <div class="qc-section-title">Importação concluída</div>
+          <p>${ok} documento(s) importado(s) com sucesso.</p>
+          ${falhas.length ? `<p class="doc-import-aviso-ignorados">${falhas.length} falharam: ${falhas.map(f => escapeHtml(f)).join(', ')}</p>` : ''}
+          <button type="button" class="qc-btn" id="doc-import-fechar-resultado">Fechar</button>
+        </div>
+      `;
+      document.getElementById('doc-import-fechar-resultado').addEventListener('click', () => { area.innerHTML = ''; });
+    }
+
+    // ---------------------------------------------------------------
     // DRAWER — LEITURA
     // ---------------------------------------------------------------
     function abrirLeitura(id) {
@@ -316,6 +607,7 @@
         <div class="doc-conteudo-leitura">${escapeHtml(d.conteudo || '(documento ainda sem conteúdo)')}</div>
         <div class="doc-form-rodape">
           <div>
+            <button type="button" class="qc-btn" id="doc-btn-exportar-pdf"><i class="bi bi-file-earmark-pdf"></i> Exportar em PDF</button>
             ${podeEditar ? `<button type="button" class="qc-btn" id="doc-btn-historico">Ver revisões anteriores</button>` : ''}
           </div>
           ${podeEditar ? `<button type="button" class="qc-btn qc-btn-primary" id="doc-btn-editar-do-drawer">Editar / nova revisão</button>` : ''}
@@ -323,12 +615,75 @@
         <div id="doc-historico-area"></div>
       `;
 
+      document.getElementById('doc-btn-exportar-pdf').addEventListener('click', () => exportarPdf(d));
       if (podeEditar) {
         document.getElementById('doc-btn-editar-do-drawer').addEventListener('click', () => abrirEdicao(id));
         document.getElementById('doc-btn-historico').addEventListener('click', () => carregarHistorico(id));
       }
 
       abrirDrawer();
+    }
+
+    // ---------------------------------------------------------------
+    // EXPORTAÇÃO EM PDF — gerada inteiramente no navegador (jsPDF),
+    // nada é enviado pra nenhum servidor.
+    // ---------------------------------------------------------------
+    function exportarPdf(d) {
+      if (!window.jspdf || !window.jspdf.jsPDF) {
+        alert('Não foi possível carregar o gerador de PDF agora. Verifique sua conexão e tente de novo.');
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+      const margemEsq = 50;
+      const margemDir = 50;
+      const larguraUtil = pdf.internal.pageSize.getWidth() - margemEsq - margemDir;
+      const alturaPagina = pdf.internal.pageSize.getHeight();
+      let y = 55;
+
+      function quebraDePaginaSeNecessario(proximaAltura) {
+        if (y + proximaAltura > alturaPagina - 45) {
+          pdf.addPage();
+          y = 55;
+        }
+      }
+
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(14);
+      pdf.text(d.codigo || '', margemEsq, y);
+      y += 20;
+      pdf.setFontSize(13);
+      const linhasTitulo = pdf.splitTextToSize(d.titulo || '(sem título)', larguraUtil);
+      pdf.text(linhasTitulo, margemEsq, y);
+      y += linhasTitulo.length * 16 + 6;
+
+      pdf.setDrawColor(180);
+      pdf.line(margemEsq, y, margemEsq + larguraUtil, y);
+      y += 16;
+
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9.5);
+      pdf.setTextColor(90);
+      pdf.text(`Categoria: ${d.categoria || '—'}      Revisão: ${d.revisao || '—'}`, margemEsq, y);
+      y += 24;
+      pdf.setTextColor(0);
+
+      pdf.setFontSize(10.5);
+      const conteudo = d.conteudo || '(documento ainda sem conteúdo)';
+      const paragrafos = conteudo.split('\n');
+      paragrafos.forEach(paragrafo => {
+        const linhas = pdf.splitTextToSize(paragrafo === '' ? ' ' : paragrafo, larguraUtil);
+        linhas.forEach(linha => {
+          quebraDePaginaSeNecessario(14);
+          pdf.text(linha, margemEsq, y);
+          y += 14;
+        });
+      });
+
+      const nomeArquivo = `${(d.codigo || 'documento').trim()} - ${(d.titulo || '').trim()} rev ${d.revisao || '00'}.pdf`
+        .replace(/[\\/:*?"<>|]+/g, '-');
+      pdf.save(nomeArquivo);
     }
 
     async function carregarHistorico(id) {
