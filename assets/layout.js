@@ -48,12 +48,12 @@ export function garantirEsqueleto({ homeHref }) {
   wrapper.innerHTML = `
     <div id="qc-loading">Carregando...</div>
     <button class="qc-sidebar-toggle" id="qc-sidebar-toggle" title="Menu"><i class="bi bi-list"></i></button>
+    <button type="button" class="qc-sidebar-colapsar" id="qc-sidebar-colapsar" title="Recolher menu">
+      <i class="bi bi-chevron-left"></i>
+    </button>
     <div id="qc-app">
       <div class="qc-shell">
         <aside class="qc-sidebar" id="qc-sidebar">
-          <button type="button" class="qc-sidebar-colapsar" id="qc-sidebar-colapsar" title="Recolher menu">
-            <i class="bi bi-chevron-left"></i>
-          </button>
           <div class="qc-sidebar-logo">
             <img src="${LOGO_URL}" alt="Viação Mirim">
             <span>Central da<br>Qualidade</span>
