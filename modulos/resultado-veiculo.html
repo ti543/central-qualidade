@@ -337,6 +337,50 @@
           </table>
         </div>
       </div>
+
+      <div class="form-card">
+        <h3>Cidades de região especial (ex: Oeste da RSL)</h3>
+        <p style="font-size:13px; color:#666; margin-top:-8px; margin-bottom:14px;">
+          Algumas unidades marcam entregas pra certas cidades com uma região especial (ex: a RSL marca "OESTE"
+          pra Chapecó, Xanxerê e outras). Cadastre aqui as cidades de cada região — o cálculo marca a placa
+          automaticamente quando ela faz uma <strong>entrega</strong> pra uma dessas cidades (coleta não conta),
+          desde que a planilha semanal tenha a coluna "Cidade Entrega" mapeada no passo 2 do Lançar Semana.
+        </p>
+        <div class="form-row col3">
+          <div class="form-group">
+            <label>Unidade</label>
+            <select id="rg-unidade"></select>
+          </div>
+          <div class="form-group">
+            <label>Região</label>
+            <input type="text" id="rg-regiao" placeholder="Ex: OESTE">
+          </div>
+          <div class="form-group">
+            <label>Cidade</label>
+            <input type="text" id="rg-cidade" placeholder="Ex: Chapecó">
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="btn-salvar-regiao">Adicionar cidade</button>
+        </div>
+        <p style="font-size:13px; color:#666; margin-top:16px; margin-bottom:6px;">
+          Pra cadastrar várias cidades de uma vez (mesma unidade/região), cole uma cidade por linha aqui:
+        </p>
+        <div class="form-row col2">
+          <div class="form-group">
+            <textarea id="rg-cidades-lote" rows="4" placeholder="Chapecó&#10;Xanxerê&#10;São Miguel do Oeste&#10;..." style="font-family:inherit; font-size:14px; padding:8px 12px; border:0.5px solid #ccc; border-radius:4px;"></textarea>
+          </div>
+          <div class="form-group" style="justify-content:flex-end;">
+            <button class="btn" id="btn-salvar-regioes-lote">Adicionar lista de cidades</button>
+          </div>
+        </div>
+        <div class="table-wrapper" style="margin-top:14px;">
+          <table class="rv-table" style="min-width:500px;">
+            <thead><tr><th>Unidade</th><th>Região</th><th>Cidade</th><th></th></tr></thead>
+            <tbody id="rg-tabela"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -356,6 +400,7 @@ let perfil = null;
 let frotaCache = [];     // [{id(placa), placa, tipo, relacionamento, ativo}]
 let tarifasCache = [];   // [{id(tipo), tipo, diaria, valorServico}]
 let feriadosCache = [];  // [{id, data('AAAA-MM-DD'), unidade('TODAS' ou uma UNIDADES_PADRAO), descricao}]
+let regioesCache = [];   // [{id, unidade('TODAS' ou uma UNIDADES_PADRAO), regiao(ex:'OESTE'), cidade}] - cidades de entrega que marcam o veículo com uma região especial (ex: RSL/Oeste), igual à coluna "OESTE?" da planilha
 let importacoesCache = []; // metadados das semanas da unidade selecionada em "Resultados"
 let planilhaLida = null; // { linhas: [[...]], cabecalho: [...] }
 let mapaColunasEscolhido = null;
@@ -450,6 +495,23 @@ function montarConjuntoFeriados(unidade, anoInicio, anoFim) {
   return conjunto;
 }
 
+// Normaliza nome de cidade pra comparar sem se importar com acento/maiúscula
+// (ex: "São Bento do Sul" e "SAO BENTO DO SUL" batem igual).
+function normCidade(c) {
+  return String(c || '').trim().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+// Devolve a(s) região(ões) especial(is) cadastrada(s) pra essa cidade, numa
+// unidade (ex: RSL cadastra "OESTE" pra Chapecó, Xanxerê etc, igual a
+// coluna "OESTE?" da planilha original - lá só marcava entregas, não coletas).
+function regioesDaCidade(unidade, cidade) {
+  const c = normCidade(cidade);
+  if (!c) return [];
+  return regioesCache
+    .filter(r => (r.unidade === 'TODAS' || r.unidade === unidade) && normCidade(r.cidade) === c)
+    .map(r => r.regiao);
+}
+
 function ehDiaUtil(data, conjuntoFeriados) {
   const diaSemana = data.getDay(); // 0=domingo, 6=sábado
   if (diaSemana === 0 || diaSemana === 6) return false;
@@ -489,9 +551,11 @@ initLayout({
   await carregarFrota();
   await carregarTarifas();
   await carregarFeriados();
+  await carregarRegioes();
   renderizarFrota();
   renderizarTarifas();
   renderizarFeriados();
+  renderizarRegioes();
 }).catch(err => console.error('Falha ao montar layout:', err));
 
 function povoarSelectsUnidade() {
@@ -514,6 +578,9 @@ function povoarSelectsUnidade() {
 
   const selFeriado = document.getElementById('fe-unidade');
   if (selFeriado) selFeriado.innerHTML = `<option value="TODAS">TODAS as unidades</option>` + UNIDADES_PADRAO.map(u => `<option value="${u}">${u}</option>`).join('');
+
+  const selRegiao = document.getElementById('rg-unidade');
+  if (selRegiao) selRegiao.innerHTML = `<option value="TODAS">TODAS as unidades</option>` + UNIDADES_PADRAO.map(u => `<option value="${u}">${u}</option>`).join('');
 }
 
 function ligarEventos() {
@@ -559,6 +626,9 @@ function ligarEventos() {
   document.getElementById('btn-cancelar-edicao-tarifa').addEventListener('click', cancelarEdicaoTarifa);
 
   document.getElementById('btn-salvar-feriado').addEventListener('click', salvarFeriado);
+
+  document.getElementById('btn-salvar-regiao').addEventListener('click', salvarRegiao);
+  document.getElementById('btn-salvar-regioes-lote').addEventListener('click', salvarRegioesEmLote);
 }
 
 function irParaPasso(nome) {
@@ -597,7 +667,8 @@ const SINONIMOS_COLUNA = {
   tipoBaixa: { exatos: ['tipo baixa', 'tipo_baixa', 'tipobaixa'], contem: ['tipo baixa', 'tipobaixa'] },
   data: { exatos: ['data baixa', 'data_baixa', 'databaixa', 'data'], contem: ['data baixa', 'databaixa'] },
   peso: { exatos: ['peso', 'peso calculo', 'peso cálculo', 'peso kg'], contem: ['peso'] },
-  frete: { exatos: ['frete-r$', 'frete r$', 'frete', 'valor frete', 'vlr frete', 'vlr. frete'], contem: ['frete'] }
+  frete: { exatos: ['frete-r$', 'frete r$', 'frete', 'valor frete', 'vlr frete', 'vlr. frete'], contem: ['frete'] },
+  cidadeEntrega: { exatos: ['cidade entrega', 'cidade_entrega', 'cidadeentrega'], contem: ['cidade entrega', 'cidadeentrega'] }
 };
 
 function irParaMapeamento() {
@@ -639,7 +710,8 @@ function irParaMapeamento() {
     ['tipoBaixa', 'Coluna do TIPO BAIXA (C/E)'],
     ['data', 'Coluna da DATA BAIXA'],
     ['peso', 'Coluna do PESO'],
-    ['frete', 'Coluna do FRETE (R$)']
+    ['frete', 'Coluna do FRETE (R$)'],
+    ['cidadeEntrega', 'Coluna da CIDADE ENTREGA (opcional, só pra região/Oeste)']
   ];
 
   const container = document.getElementById('mapa-colunas');
@@ -715,13 +787,22 @@ function calcularResultadoSemana() {
     if (!porPlaca[placa]) {
       porPlaca[placa] = {
         placaOriginal, freteColeta: 0, pesoColeta: 0, baixaColeta: 0, diasColeta: new Set(),
-        freteEntrega: 0, pesoEntrega: 0, baixaEntrega: 0, diasEntrega: new Set(), diasTotal: new Set()
+        freteEntrega: 0, pesoEntrega: 0, baixaEntrega: 0, diasEntrega: new Set(), diasTotal: new Set(),
+        regioes: new Set()
       };
     }
     const p = porPlaca[placa];
     p.diasTotal.add(data);
     if (tipoBaixa === 'C') { p.freteColeta += frete; p.pesoColeta += peso; p.baixaColeta += 1; p.diasColeta.add(data); }
-    else { p.freteEntrega += frete; p.pesoEntrega += peso; p.baixaEntrega += 1; p.diasEntrega.add(data); }
+    else {
+      p.freteEntrega += frete; p.pesoEntrega += peso; p.baixaEntrega += 1; p.diasEntrega.add(data);
+      // Marca região especial (ex: RSL/Oeste) só pra ENTREGA, igual a
+      // coluna "OESTE?" da planilha original - lá uma coleta pra uma
+      // cidade da região não contava, só a entrega de verdade.
+      if (mapa.cidadeEntrega >= 0) {
+        regioesDaCidade(unidadeDoCalculo, linha[mapa.cidadeEntrega]).forEach(reg => p.regioes.add(reg));
+      }
+    }
 
     if (!frotaPorPlaca[placa]) placasDesconhecidas.add(placaOriginal);
   });
@@ -756,7 +837,8 @@ function calcularResultadoSemana() {
       freteColeta: p.freteColeta, pesoColeta: p.pesoColeta, baixaColeta: p.baixaColeta, diasColeta: p.diasColeta.size,
       freteEntrega: p.freteEntrega, pesoEntrega: p.pesoEntrega, baixaEntrega: p.baixaEntrega, diasEntrega: p.diasEntrega.size,
       freteTotal, pesoTotal, baixaTotal, diasTotal, servicosPorDia,
-      totalPago, producaoTransferencia, pagoPorTonelada, resultado, resultadoTotal
+      totalPago, producaoTransferencia, pagoPorTonelada, resultado, resultadoTotal,
+      regiao: Array.from(p.regioes).join(', ')
     };
   }).sort((a, b) => a.placa.localeCompare(b.placa));
 
@@ -861,6 +943,7 @@ function montarTabelaResultados(c) {
       <td>${r.pagoPorTonelada !== null && r.pagoPorTonelada !== undefined ? fmtMoeda(r.pagoPorTonelada) : '—'}</td>
       <td>${r.resultado !== null && r.resultado !== undefined ? fmtPct(r.resultado) : '—'}</td>
       <td>${r.resultadoTotal !== null && r.resultadoTotal !== undefined ? fmtPct(r.resultadoTotal) : '—'}</td>
+      <td>${escapeHtml(r.regiao || '')}</td>
     </tr>`;
 
   const linhaSubtotal = (nome, ac) => `
@@ -872,6 +955,7 @@ function montarTabelaResultados(c) {
       <td>${ac.diasTotal}</td><td>${fmtNum(ac.servicosPorDia, 1)}</td>
       <td>${fmtMoeda(ac.totalPago)}</td><td>${fmtMoeda(ac.producaoTransferencia || 0)}</td>
       <td>${fmtMoeda(ac.pagoPorTonelada)}</td><td>${fmtPct(ac.resultado)}</td><td>${fmtPct(ac.resultadoTotal || 0)}</td>
+      <td></td>
     </tr>`;
 
   let corpo = '';
@@ -893,7 +977,7 @@ function montarTabelaResultados(c) {
           <th>Frete Entrega</th><th>Peso Entrega</th><th>Baixa Entrega</th>
           <th>Frete Total</th><th>Peso Total</th><th>Baixa Total</th>
           <th>Dias Trab.</th><th>Serv./dia</th>
-          <th>Total Pago</th><th>Produção Transf.</th><th>Pago/ton.</th><th>Resultado</th><th>Resultado Total</th>
+          <th>Total Pago</th><th>Produção Transf.</th><th>Pago/ton.</th><th>Resultado</th><th>Resultado Total</th><th>Região</th>
         </tr></thead>
         <tbody>
           ${corpo}
@@ -905,6 +989,7 @@ function montarTabelaResultados(c) {
             <td>${c.totalGeral.diasTotal}</td><td>${fmtNum(c.totalGeral.servicosPorDia, 1)}</td>
             <td>${fmtMoeda(c.totalGeral.totalPago)}</td><td>${fmtMoeda(c.totalGeral.producaoTransferencia || 0)}</td>
             <td>${fmtMoeda(c.totalGeral.pagoPorTonelada)}</td><td>${fmtPct(c.totalGeral.resultado)}</td><td>${fmtPct(c.totalGeral.resultadoTotal || 0)}</td>
+            <td></td>
           </tr>
         </tbody>
       </table>
@@ -934,6 +1019,7 @@ function montarTabelaResultadosEditavel(c) {
       <td id="rv-td-pagoton-${chave}">${(r.pagoPorTonelada !== null && r.pagoPorTonelada !== undefined) ? fmtMoeda(r.pagoPorTonelada) : '—'}</td>
       <td id="rv-td-resultado-${chave}">${(r.resultado !== null && r.resultado !== undefined) ? fmtPct(r.resultado) : '—'}</td>
       <td id="rv-td-resultadototal-${chave}">${(r.resultadoTotal !== null && r.resultadoTotal !== undefined) ? fmtPct(r.resultadoTotal) : '—'}</td>
+      <td>${escapeHtml(r.regiao || '')}</td>
     </tr>`;
   };
 
@@ -951,6 +1037,7 @@ function montarTabelaResultadosEditavel(c) {
       <td id="rv-sub-pagoton-${id}">${fmtMoeda(ac.pagoPorTonelada)}</td>
       <td id="rv-sub-resultado-${id}">${fmtPct(ac.resultado)}</td>
       <td id="rv-sub-resultadototal-${id}">${fmtPct(ac.resultadoTotal)}</td>
+      <td></td>
     </tr>`;
   };
 
@@ -973,7 +1060,7 @@ function montarTabelaResultadosEditavel(c) {
           <th>Frete Entrega</th><th>Peso Entrega</th><th>Baixa Entrega</th>
           <th>Frete Total</th><th>Peso Total</th><th>Baixa Total</th>
           <th>Dias Trab.</th><th>Serv./dia</th>
-          <th>Total Pago</th><th>Produção Transf.</th><th>Pago/ton.</th><th>Resultado</th><th>Resultado Total</th>
+          <th>Total Pago</th><th>Produção Transf.</th><th>Pago/ton.</th><th>Resultado</th><th>Resultado Total</th><th>Região</th>
         </tr></thead>
         <tbody>
           ${corpo}
@@ -988,6 +1075,7 @@ function montarTabelaResultadosEditavel(c) {
             <td id="rv-total-pagoton">${fmtMoeda(c.totalGeral.pagoPorTonelada)}</td>
             <td id="rv-total-resultado">${fmtPct(c.totalGeral.resultado)}</td>
             <td id="rv-total-resultadototal">${fmtPct(c.totalGeral.resultadoTotal)}</td>
+            <td></td>
           </tr>
         </tbody>
       </table>
@@ -1180,7 +1268,8 @@ function exportarResultadoExcel() {
     'Frete Total': r.freteTotal, 'Peso Total': r.pesoTotal, 'Baixa Total': r.baixaTotal,
     'Dias Trabalhados': r.diasTotal, 'Serviços/dia': r.servicosPorDia,
     'Total Pago': r.totalPago, 'Produção Transferência': r.producaoTransferencia || 0,
-    'Pago/Tonelada': r.pagoPorTonelada, 'Resultado': r.resultado, 'Resultado Total': r.resultadoTotal
+    'Pago/Tonelada': r.pagoPorTonelada, 'Resultado': r.resultado, 'Resultado Total': r.resultadoTotal,
+    'Região': r.regiao || ''
   }));
   const planilha = XLSX.utils.json_to_sheet(linhas);
   const livro = XLSX.utils.book_new();
@@ -1670,6 +1759,93 @@ async function removerFeriado(id) {
   await deleteDoc(doc(db, 'rv_feriados', id));
   await carregarFeriados();
   renderizarFeriados();
+}
+
+/* =====================================================================
+   CIDADES DE REGIÃO ESPECIAL (ex: "OESTE" da RSL) — complementam o cálculo
+   marcando a placa quando ela faz uma ENTREGA pra uma cidade cadastrada
+   aqui, igual a coluna "OESTE?" da planilha original. Usado por
+   regioesDaCidade() dentro de calcularResultadoSemana().
+   ===================================================================== */
+
+async function carregarRegioes() {
+  const snap = await getDocs(collection(db, 'rv_regioes_cidades'));
+  regioesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (a.unidade + a.regiao + a.cidade).localeCompare(b.unidade + b.regiao + b.cidade));
+}
+
+function renderizarRegioes() {
+  const tbody = document.getElementById('rg-tabela');
+  if (!tbody) return;
+  tbody.innerHTML = regioesCache.map(r => `
+    <tr>
+      <td>${escapeHtml(r.unidade || 'TODAS')}</td>
+      <td>${escapeHtml(r.regiao || '')}</td>
+      <td>${escapeHtml(r.cidade || '')}</td>
+      <td style="text-align:center;">
+        <button class="btn btn-sm btn-danger" data-remover-regiao="${escapeHtml(r.id)}">Remover</button>
+      </td>
+    </tr>
+  `).join('');
+
+  document.querySelectorAll('[data-remover-regiao]').forEach(btn => {
+    btn.addEventListener('click', () => removerRegiao(btn.dataset.removerRegiao));
+  });
+}
+
+async function salvarRegiaoCidade(unidade, regiao, cidade) {
+  const cidadeLimpa = String(cidade || '').trim();
+  const regiaoLimpa = String(regiao || '').trim().toUpperCase();
+  if (!cidadeLimpa || !regiaoLimpa) return false;
+  const id = idSafe(`${unidade}_${regiaoLimpa}_${normCidade(cidadeLimpa)}`);
+  await setDoc(doc(db, 'rv_regioes_cidades', id), { unidade, regiao: regiaoLimpa, cidade: cidadeLimpa, atualizadoEm: serverTimestamp() }, { merge: true });
+  return true;
+}
+
+async function salvarRegiao() {
+  const unidade = document.getElementById('rg-unidade').value;
+  const regiao = document.getElementById('rg-regiao').value;
+  const cidade = document.getElementById('rg-cidade').value;
+  if (!regiao.trim() || !cidade.trim()) { alert('Preencha a região e a cidade.'); return; }
+  try {
+    await salvarRegiaoCidade(unidade, regiao, cidade);
+    document.getElementById('rg-cidade').value = '';
+    await carregarRegioes();
+    renderizarRegioes();
+  } catch (err) {
+    alert('Erro ao salvar a cidade: ' + err.message);
+  }
+}
+
+// Adiciona várias cidades de uma vez (mesma unidade/região), uma por linha
+// no textarea - pensado pra cadastrar de uma vez uma lista grande, tipo as
+// ~40 cidades da região Oeste da RSL.
+async function salvarRegioesEmLote() {
+  const unidade = document.getElementById('rg-unidade').value;
+  const regiao = document.getElementById('rg-regiao').value;
+  const texto = document.getElementById('rg-cidades-lote').value;
+  const cidades = texto.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (!regiao.trim()) { alert('Preencha a região.'); return; }
+  if (!cidades.length) { alert('Cole ao menos uma cidade (uma por linha).'); return; }
+
+  try {
+    for (const cidade of cidades) {
+      await salvarRegiaoCidade(unidade, regiao, cidade);
+    }
+    document.getElementById('rg-cidades-lote').value = '';
+    await carregarRegioes();
+    renderizarRegioes();
+    alert(`${cidades.length} cidade(s) adicionada(s) à região "${regiao.trim().toUpperCase()}".`);
+  } catch (err) {
+    alert('Erro ao salvar a lista de cidades: ' + err.message);
+  }
+}
+
+async function removerRegiao(id) {
+  if (!confirm('Remover esta cidade da região?')) return;
+  await deleteDoc(doc(db, 'rv_regioes_cidades', id));
+  await carregarRegioes();
+  renderizarRegioes();
 }
 </script>
 </body>
