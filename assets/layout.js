@@ -20,6 +20,7 @@ const ICONES_MODULO = {
   'rg29': 'bi-people-fill',
   'aprovacao-documentos': 'bi-file-earmark-check-fill',
   'documentos': 'bi-folder2-open',
+  'resultado-veiculo': 'bi-truck',
 };
 
 export function escapeHtml(str) {

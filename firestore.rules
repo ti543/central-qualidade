@@ -198,5 +198,35 @@ service cloud.firestore {
         allow write: if souQualidade();
       }
     }
+
+    // ------------------------------------------------------------------
+    // RESULTADO POR VEÍCULO
+    // - veiculos_frota: cadastro central de placas (substitui o Placas.xlsm
+    //   copiado à mão em cada planilha semanal). Leitura pra quem tem o
+    //   módulo liberado; só qualidade cadastra/edita/importa em lote.
+    // - rv_tarifas: tabela de diária + valor por serviço por tipo de
+    //   veículo. Muda raramente — só qualidade edita.
+    // - rv_importacoes: uma semana calculada por unidade/período. Cada
+    //   unidade só lança e vê a própria semana (exceto MTZ/qualidade, que
+    //   vê tudo, igual RG21/RG29); só qualidade edita/exclui uma semana já
+    //   lançada.
+    // ------------------------------------------------------------------
+    match /veiculos_frota/{placa} {
+      allow read: if temPermissao("resultado-veiculo");
+      allow write: if souQualidade();
+    }
+
+    match /rv_tarifas/{tipo} {
+      allow read: if temPermissao("resultado-veiculo");
+      allow write: if souQualidade();
+    }
+
+    match /rv_importacoes/{id} {
+      allow read: if temPermissao("resultado-veiculo") &&
+        (vejoTudo() || resource.data.unidade == minhaUnidade());
+      allow create: if temPermissao("resultado-veiculo") &&
+        (request.resource.data.unidade == minhaUnidade() || souQualidade());
+      allow update, delete: if temPermissao("resultado-veiculo") && souQualidade();
+    }
   }
 }

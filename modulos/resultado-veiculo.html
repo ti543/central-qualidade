@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resultado por Veículo</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link href="../assets/layout.css" rel="stylesheet">
+<style>
+  .container { max-width: 1300px; margin: 0 auto; padding: 0; }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; overflow-x: auto; }
+  .tab-btn { padding: 10px 18px; border: 1px solid #ddd; background: #fff; cursor: pointer; font-size: 13.5px; font-weight: 600; color: #555; border-radius: 6px; transition: all 0.2s; white-space: nowrap; }
+  .tab-btn:hover { background: #f1f3f9; }
+  .tab-btn.active { background: var(--qc-primary); color: #fff; border-color: var(--qc-primary); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .form-card { background: #fff; border: 0.5px solid #ccc; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .form-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--qc-primary); }
+  .form-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .form-row.col2 { grid-template-columns: repeat(2, 1fr); }
+  .form-row.col3 { grid-template-columns: repeat(3, 1fr); }
+  .form-group { display: flex; flex-direction: column; }
+  .form-group label { font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #333; }
+  .form-group input, .form-group select { padding: 8px 12px; border: 0.5px solid #ccc; border-radius: 4px; font-size: 14px; font-family: inherit; }
+  @media (max-width: 860px) { .form-row, .form-row.col2, .form-row.col3 { grid-template-columns: 1fr; } }
+
+  .btn { padding: 10px 16px; border: 0.5px solid #ccc; border-radius: 4px; background: transparent; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.3s; }
+  .btn:hover { background: #eee; }
+  .btn-primary { background: var(--qc-primary); color: #fff; border-color: var(--qc-primary); }
+  .btn-primary:hover { background: var(--qc-primary-dark); color: #fff; }
+  .btn-danger { background: #dc3545; color: #fff; border-color: #dc3545; }
+  .btn-danger:hover { background: #a71d2a; color: #fff; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-group { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+
+  .table-wrapper { overflow-x: auto; max-width: 100%; border: 1px solid #ddd; border-radius: 6px; background: white; margin-top: 10px; }
+  table.rv-table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 1100px; }
+  table.rv-table th { background: var(--qc-primary); padding: 10px 8px; text-align: right; font-weight: 600; color: white; white-space: nowrap; position: sticky; top: 0; }
+  table.rv-table th:nth-child(1), table.rv-table th:nth-child(2), table.rv-table th:nth-child(3) { text-align: left; }
+  table.rv-table td { padding: 8px 8px; border-bottom: 1px solid #eee; vertical-align: middle; white-space: nowrap; color: #444; text-align: right; }
+  table.rv-table td:nth-child(1), table.rv-table td:nth-child(2), table.rv-table td:nth-child(3) { text-align: left; }
+  table.rv-table tr:hover { background: #f1f5f9; }
+  table.rv-table tr.rv-subtotal { background: #eef0fa; font-weight: 700; }
+  table.rv-table tr.rv-total { background: var(--qc-primary); color: #fff; font-weight: 700; }
+  table.rv-table tr.rv-total td { color: #fff; }
+  table.rv-table tr.rv-sem-placa td:nth-child(2) { color: #c65911; font-weight: 700; }
+
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge-ok { background: #d4edda; color: #155724; }
+  .badge-alerta { background: #fff3cd; color: #856404; }
+  .badge-erro { background: #fce4d6; color: #c65911; }
+  .badge-off { background: #eee; color: #777; }
+
+  .aviso-box { background: #fff3cd; border: 1px solid #f0ad4e; color: #856404; padding: 12px 16px; border-radius: 6px; margin-top: 14px; font-size: 13.5px; }
+  .aviso-box ul { margin: 6px 0 0 18px; }
+
+  .passo { display: none; }
+  .passo.active { display: block; }
+
+  .busca-input { max-width: 320px; margin-bottom: 14px; }
+
+  .pill-contador { display: inline-block; background: #eef0fa; color: var(--qc-primary); font-weight: 700; padding: 4px 12px; border-radius: 20px; font-size: 13px; margin-left: 8px; }
+</style>
+</head>
+<body>
+
+<div id="qc-page-content">
+  <div class="container">
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="lancar">Lançar Semana</button>
+      <button class="tab-btn" data-tab="resultados">Resultados</button>
+      <button class="tab-btn" data-tab="frota">Frota (Placas)</button>
+      <button class="tab-btn" id="aba-tarifas" data-tab="tarifas" style="display:none;">Tarifas</button>
+    </div>
+
+    <!-- ===================================================================
+         ABA 1 — LANÇAR SEMANA (importar planilha semanal e calcular)
+         =================================================================== -->
+    <div class="tab-content active" id="tab-lancar">
+
+      <div class="passo active" id="passo-escolher">
+        <div class="form-card">
+          <h3>1. Escolha a unidade, o período e a planilha</h3>
+          <div class="form-row col3">
+            <div class="form-group">
+              <label>Unidade</label>
+              <select id="lc-unidade"></select>
+            </div>
+            <div class="form-group">
+              <label>Período - de</label>
+              <input type="date" id="lc-periodo-inicio">
+            </div>
+            <div class="form-group">
+              <label>Período - até</label>
+              <input type="date" id="lc-periodo-fim">
+            </div>
+          </div>
+          <div class="form-row col2" style="margin-top:16px;">
+            <div class="form-group">
+              <label>Planilha da semana (.xlsx, .xls ou .xlsm)</label>
+              <input type="file" id="lc-arquivo" accept=".xlsx,.xls,.xlsm">
+            </div>
+            <div class="form-group">
+              <label>Aba da planilha</label>
+              <select id="lc-aba" disabled><option>Escolha o arquivo primeiro...</option></select>
+            </div>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-primary" id="btn-ler-planilha">Ler planilha &rarr;</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="passo" id="passo-mapear">
+        <div class="form-card">
+          <h3>2. Confirme as colunas da planilha</h3>
+          <p style="font-size:13.5px;color:#666;margin-bottom:14px;">Tentei adivinhar sozinho — só confira se bateu certo antes de calcular.</p>
+          <div class="form-row col3" id="mapa-colunas"></div>
+          <div class="btn-group">
+            <button class="btn" id="btn-voltar-mapear">&larr; Voltar</button>
+            <button class="btn btn-primary" id="btn-calcular">Calcular resultado &rarr;</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="passo" id="passo-revisar">
+        <div class="form-card">
+          <h3>3. Revise e salve</h3>
+          <div id="revisar-resumo" style="font-size:14px;margin-bottom:10px;"></div>
+          <div id="revisar-avisos"></div>
+          <div id="revisar-tabela"></div>
+          <div class="btn-group">
+            <button class="btn" id="btn-voltar-revisar">&larr; Voltar</button>
+            <button class="btn btn-primary" id="btn-salvar-importacao">Salvar semana</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ===================================================================
+         ABA 2 — RESULTADOS (histórico de semanas já calculadas)
+         =================================================================== -->
+    <div class="tab-content" id="tab-resultados">
+      <div class="form-card">
+        <h3>Semanas lançadas</h3>
+        <div class="form-row col3">
+          <div class="form-group">
+            <label>Unidade</label>
+            <select id="rs-unidade"></select>
+          </div>
+          <div class="form-group">
+            <label>Semana</label>
+            <select id="rs-importacao"><option value="">Selecione a unidade...</option></select>
+          </div>
+          <div class="form-group" style="justify-content:flex-end;">
+            <div class="btn-group" style="margin-top:0;">
+              <button class="btn" id="btn-exportar-resultado">Exportar Excel</button>
+              <button class="btn btn-danger" id="btn-excluir-importacao" style="display:none;">Excluir semana</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="rs-conteudo"></div>
+    </div>
+
+    <!-- ===================================================================
+         ABA 3 — FROTA (cadastro central de placas)
+         =================================================================== -->
+    <div class="tab-content" id="tab-frota">
+      <div class="form-card" id="card-form-placa">
+        <h3>Cadastrar / editar placa</h3>
+        <div class="form-row col4">
+          <div class="form-group">
+            <label>Placa</label>
+            <input type="text" id="fr-placa" maxlength="10" style="text-transform:uppercase;">
+          </div>
+          <div class="form-group">
+            <label>Tipo</label>
+            <input type="text" id="fr-tipo" placeholder="Ex: TRUCK, TOCO, CARRO...">
+          </div>
+          <div class="form-group">
+            <label>Relacionamento</label>
+            <select id="fr-relacionamento">
+              <option value="FROTA">Frota</option>
+              <option value="AGREGADO">Agregado</option>
+              <option value="CARRETEIRO">Carreteiro</option>
+              <option value="OUTRO">Outro</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Situação</label>
+            <select id="fr-ativo">
+              <option value="1">Ativo</option>
+              <option value="0">Inativo</option>
+            </select>
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="btn-salvar-placa">Salvar placa</button>
+          <button class="btn" id="btn-cancelar-edicao-placa" style="display:none;">Cancelar edição</button>
+          <span style="flex:1"></span>
+          <label class="btn" style="margin:0;">
+            Importar lista de placas (Excel)
+            <input type="file" id="fr-importar-arquivo" accept=".xlsx,.xls,.xlsm" style="display:none;">
+          </label>
+        </div>
+        <div id="fr-import-avisos"></div>
+      </div>
+
+      <div class="form-card">
+        <input type="text" class="form-group input busca-input" id="fr-busca" placeholder="Buscar placa ou tipo..." style="padding:8px 12px;border:0.5px solid #ccc;border-radius:4px;width:100%;max-width:320px;">
+        <span class="pill-contador" id="fr-contador">0 placas</span>
+        <div class="table-wrapper">
+          <table class="rv-table" id="fr-tabela" style="min-width:700px;">
+            <thead><tr><th>Placa</th><th>Tipo</th><th>Relacionamento</th><th style="text-align:center;">Situação</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================================================================
+         ABA 4 — TARIFAS (diária + valor por serviço, por tipo)
+         =================================================================== -->
+    <div class="tab-content" id="tab-tarifas">
+      <div class="form-card">
+        <h3>Cadastrar / editar tarifa</h3>
+        <div class="form-row col3">
+          <div class="form-group">
+            <label>Tipo (igual ao cadastrado na frota)</label>
+            <input type="text" id="tf-tipo">
+          </div>
+          <div class="form-group">
+            <label>Diária (R$ por dia trabalhado)</label>
+            <input type="number" id="tf-diaria" step="0.01" min="0">
+          </div>
+          <div class="form-group">
+            <label>Valor por serviço (R$ por baixa)</label>
+            <input type="number" id="tf-valor-servico" step="0.01" min="0">
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="btn-salvar-tarifa">Salvar tarifa</button>
+          <button class="btn" id="btn-cancelar-edicao-tarifa" style="display:none;">Cancelar edição</button>
+        </div>
+      </div>
+      <div class="form-card">
+        <div class="table-wrapper">
+          <table class="rv-table" style="min-width:500px;">
+            <thead><tr><th>Tipo</th><th>Diária</th><th>Valor por serviço</th><th></th></tr></thead>
+            <tbody id="tf-tabela"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+import { auth, db } from '../firebase-config.js';
+import {
+  doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, getDocs, query, where, writeBatch, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { initLayout, escapeHtml } from '../assets/layout.js';
+
+const MODULO = 'resultado-veiculo';
+const UNIDADES_PADRAO = ['CMP', 'RSL', 'GRU', 'POA', 'CTB', 'ITJ', 'MTZ'];
+
+let perfil = null;
+let frotaCache = [];     // [{id(placa), placa, tipo, relacionamento, ativo}]
+let tarifasCache = [];   // [{id(tipo), tipo, diaria, valorServico}]
+let importacoesCache = []; // metadados das semanas da unidade selecionada em "Resultados"
+let planilhaLida = null; // { linhas: [[...]], cabecalho: [...] }
+let mapaColunasEscolhido = null;
+let calculoAtual = null; // resultado do cálculo pronto para salvar
+let editandoPlaca = null;
+let editandoTarifa = null;
+
+function souQualidade() { return perfil && perfil.papel === 'qualidade'; }
+function vejoTudo() { return souQualidade() || (perfil && perfil.unidade === 'MTZ'); }
+function fmtMoeda(v) { return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+function fmtNum(v, dec = 0) { return (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec }); }
+function fmtPct(v) { return ((Number(v) || 0) * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'; }
+function normPlaca(p) { return String(p || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+function normTipo(t) { return String(t || '').trim().toUpperCase(); }
+
+initLayout({
+  auth, db,
+  activeSlug: MODULO,
+  pageTitle: 'Resultado por Veículo',
+  breadcrumb: 'Qualidade',
+  homeHref: '../index.html'
+}).then(async ({ perfil: p }) => {
+  perfil = p;
+
+  document.getElementById('aba-tarifas').style.display = souQualidade() ? 'inline-block' : 'none';
+  document.getElementById('btn-excluir-importacao').style.display = souQualidade() ? 'inline-block' : 'none';
+  document.getElementById('card-form-placa').style.display = souQualidade() ? 'block' : 'none';
+
+  povoarSelectsUnidade();
+  ligarEventos();
+
+  await carregarFrota();
+  await carregarTarifas();
+  renderizarFrota();
+  renderizarTarifas();
+}).catch(err => console.error('Falha ao montar layout:', err));
+
+function povoarSelectsUnidade() {
+  const minhaUnidade = perfil.unidade;
+  const opcoes = (incluirMinha) => UNIDADES_PADRAO.map(u =>
+    `<option value="${u}" ${u === minhaUnidade ? 'selected' : ''}>${u}</option>`).join('');
+
+  const selLancar = document.getElementById('lc-unidade');
+  const selResultados = document.getElementById('rs-unidade');
+
+  if (vejoTudo()) {
+    selLancar.innerHTML = opcoes();
+    selResultados.innerHTML = `<option value="">Selecione...</option>` + opcoes();
+  } else {
+    selLancar.innerHTML = `<option value="${minhaUnidade}" selected>${minhaUnidade}</option>`;
+    selLancar.disabled = true;
+    selResultados.innerHTML = `<option value="${minhaUnidade}" selected>${minhaUnidade}</option>`;
+    selResultados.disabled = true;
+  }
+}
+
+function ligarEventos() {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+      if (btn.dataset.tab === 'resultados') carregarImportacoesDaUnidade();
+    });
+  });
+
+  document.getElementById('lc-arquivo').addEventListener('change', lerArquivoPlanilha);
+  document.getElementById('btn-ler-planilha').addEventListener('click', irParaMapeamento);
+  document.getElementById('btn-voltar-mapear').addEventListener('click', () => irParaPasso('escolher'));
+  document.getElementById('btn-calcular').addEventListener('click', calcularResultadoSemana);
+  document.getElementById('btn-voltar-revisar').addEventListener('click', () => irParaPasso('mapear'));
+  document.getElementById('btn-salvar-importacao').addEventListener('click', salvarImportacao);
+
+  document.getElementById('rs-unidade').addEventListener('change', carregarImportacoesDaUnidade);
+  document.getElementById('rs-importacao').addEventListener('change', exibirImportacaoSelecionada);
+  document.getElementById('btn-exportar-resultado').addEventListener('click', exportarResultadoExcel);
+  document.getElementById('btn-excluir-importacao').addEventListener('click', excluirImportacaoSelecionada);
+
+  document.getElementById('btn-salvar-placa').addEventListener('click', salvarPlaca);
+  document.getElementById('btn-cancelar-edicao-placa').addEventListener('click', cancelarEdicaoPlaca);
+  document.getElementById('fr-busca').addEventListener('input', renderizarFrota);
+  document.getElementById('fr-importar-arquivo').addEventListener('change', importarListaDePlacas);
+
+  document.getElementById('btn-salvar-tarifa').addEventListener('click', salvarTarifa);
+  document.getElementById('btn-cancelar-edicao-tarifa').addEventListener('click', cancelarEdicaoTarifa);
+}
+
+function irParaPasso(nome) {
+  document.querySelectorAll('.passo').forEach(p => p.classList.remove('active'));
+  document.getElementById('passo-' + nome).classList.add('active');
+}
+
+/* =====================================================================
+   LEITURA DA PLANILHA SEMANAL (XLSX no navegador, sem passar por servidor)
+   ===================================================================== */
+
+function lerArquivoPlanilha() {
+  const input = document.getElementById('lc-arquivo');
+  const arquivo = input.files[0];
+  const selAba = document.getElementById('lc-aba');
+  if (!arquivo) { selAba.innerHTML = '<option>Escolha o arquivo primeiro...</option>'; selAba.disabled = true; return; }
+
+  const leitor = new FileReader();
+  leitor.onload = (e) => {
+    const livro = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+    window._rvLivro = livro;
+    selAba.innerHTML = livro.SheetNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+    selAba.disabled = false;
+    // tenta já pré-selecionar uma aba chamada "Filtro" (como no modelo atual)
+    const idxFiltro = livro.SheetNames.findIndex(n => /filtro/i.test(n));
+    if (idxFiltro >= 0) selAba.value = livro.SheetNames[idxFiltro];
+  };
+  leitor.readAsArrayBuffer(arquivo);
+}
+
+const SINONIMOS_COLUNA = {
+  placa: ['placa'],
+  tipoBaixa: ['tipo baixa', 'tipo_baixa', 'tipobaixa'],
+  data: ['data baixa', 'data_baixa', 'databaixa', 'data'],
+  peso: ['peso'],
+  frete: ['frete-r$', 'frete r$', 'frete', 'valor frete']
+};
+
+function irParaMapeamento() {
+  const livro = window._rvLivro;
+  const nomeAba = document.getElementById('lc-aba').value;
+  if (!livro || !nomeAba) { alert('Escolha o arquivo e a aba da planilha.'); return; }
+  if (!document.getElementById('lc-periodo-inicio').value || !document.getElementById('lc-periodo-fim').value) {
+    alert('Preencha o período (de / até) da semana.'); return;
+  }
+
+  const aba = livro.Sheets[nomeAba];
+  const linhas = XLSX.utils.sheet_to_json(aba, { header: 1, defval: '', raw: false });
+  // primeira linha não vazia = cabeçalho
+  const idxCabecalho = linhas.findIndex(l => l.some(c => String(c).trim() !== ''));
+  if (idxCabecalho < 0) { alert('Não encontrei dados nessa aba.'); return; }
+
+  const cabecalho = linhas[idxCabecalho].map(c => String(c || '').trim());
+  const corpo = linhas.slice(idxCabecalho + 1).filter(l => l.some(c => String(c).trim() !== ''));
+  planilhaLida = { cabecalho, corpo };
+
+  const detectar = (chave) => {
+    const sin = SINONIMOS_COLUNA[chave];
+    const i = cabecalho.findIndex(c => sin.includes(c.toLowerCase().trim()));
+    return i;
+  };
+
+  const campos = [
+    ['placa', 'Coluna da PLACA'],
+    ['tipoBaixa', 'Coluna do TIPO BAIXA (C/E)'],
+    ['data', 'Coluna da DATA BAIXA'],
+    ['peso', 'Coluna do PESO'],
+    ['frete', 'Coluna do FRETE (R$)']
+  ];
+
+  const container = document.getElementById('mapa-colunas');
+  container.innerHTML = campos.map(([chave, rotulo]) => {
+    const sel = detectar(chave);
+    const opcoesHtml = cabecalho.map((c, i) => `<option value="${i}" ${i === sel ? 'selected' : ''}>${escapeHtml(c || '(sem nome, coluna ' + (i + 1) + ')')}</option>`).join('');
+    return `
+      <div class="form-group">
+        <label>${rotulo}</label>
+        <select class="mapa-col" data-campo="${chave}"><option value="-1">(não existe)</option>${opcoesHtml}</select>
+      </div>
+    `;
+  }).join('');
+
+  irParaPasso('mapear');
+}
+
+/* =====================================================================
+   CÁLCULO (replica a lógica da planilha "Dados": coleta/entrega, dias
+   trabalhados, pagamento do motorista/veículo e resultado)
+   ===================================================================== */
+
+function calcularResultadoSemana() {
+  const mapa = {};
+  document.querySelectorAll('.mapa-col').forEach(sel => { mapa[sel.dataset.campo] = parseInt(sel.value, 10); });
+  if (mapa.placa < 0 || mapa.tipoBaixa < 0 || mapa.data < 0) {
+    alert('Preciso ao menos das colunas de Placa, Tipo Baixa e Data Baixa pra calcular.');
+    return;
+  }
+  mapaColunasEscolhido = mapa;
+
+  const frotaPorPlaca = {};
+  frotaCache.forEach(f => { frotaPorPlaca[normPlaca(f.placa)] = f; });
+  const tarifaPorTipo = {};
+  tarifasCache.forEach(t => { tarifaPorTipo[normTipo(t.tipo)] = t; });
+
+  const eventos = [];
+  const porPlaca = {};
+  const placasDesconhecidas = new Set();
+  const tiposSemTarifa = new Set();
+
+  planilhaLida.corpo.forEach(linha => {
+    const placaOriginal = String(linha[mapa.placa] || '').trim();
+    if (!placaOriginal) return;
+    const placa = normPlaca(placaOriginal);
+    const tipoBaixaBruto = String(linha[mapa.tipoBaixa] || '').trim().toUpperCase();
+    const tipoBaixa = tipoBaixaBruto.startsWith('C') ? 'C' : (tipoBaixaBruto.startsWith('E') ? 'E' : '');
+    if (!tipoBaixa) return;
+    const dataBruta = mapa.data >= 0 ? linha[mapa.data] : '';
+    const data = String(dataBruta || '').trim();
+    const peso = mapa.peso >= 0 ? (parseFloat(String(linha[mapa.peso]).replace(',', '.')) || 0) : 0;
+    const frete = mapa.frete >= 0 ? (parseFloat(String(linha[mapa.frete]).replace(',', '.')) || 0) : 0;
+
+    eventos.push({ placa: placaOriginal, tipoBaixa, data, peso, frete });
+
+    if (!porPlaca[placa]) {
+      porPlaca[placa] = {
+        placaOriginal, freteColeta: 0, pesoColeta: 0, baixaColeta: 0, diasColeta: new Set(),
+        freteEntrega: 0, pesoEntrega: 0, baixaEntrega: 0, diasEntrega: new Set(), diasTotal: new Set()
+      };
+    }
+    const p = porPlaca[placa];
+    p.diasTotal.add(data);
+    if (tipoBaixa === 'C') { p.freteColeta += frete; p.pesoColeta += peso; p.baixaColeta += 1; p.diasColeta.add(data); }
+    else { p.freteEntrega += frete; p.pesoEntrega += peso; p.baixaEntrega += 1; p.diasEntrega.add(data); }
+
+    if (!frotaPorPlaca[placa]) placasDesconhecidas.add(placaOriginal);
+  });
+
+  const resultadosPorPlaca = Object.keys(porPlaca).map(placa => {
+    const p = porPlaca[placa];
+    const cadastro = frotaPorPlaca[placa] || null;
+    const tipo = cadastro ? normTipo(cadastro.tipo) : '';
+    const relacionamento = cadastro ? (cadastro.relacionamento || 'OUTRO') : 'OUTRO';
+    const tarifa = tarifaPorTipo[tipo] || null;
+    if (cadastro && !tarifa) tiposSemTarifa.add(cadastro.tipo);
+
+    const freteTotal = p.freteColeta + p.freteEntrega;
+    const pesoTotal = p.pesoColeta + p.pesoEntrega;
+    const baixaTotal = p.baixaColeta + p.baixaEntrega;
+    const diasTotal = p.diasTotal.size;
+    const servicosPorDia = diasTotal > 0 ? baixaTotal / diasTotal : 0;
+    const totalPago = tarifa ? (tarifa.diaria * diasTotal) + (tarifa.valorServico * baixaTotal) : null;
+    const pagoPorTonelada = (totalPago !== null && pesoTotal > 0) ? totalPago / (pesoTotal / 1000) : null;
+    const resultado = (totalPago !== null && freteTotal > 0) ? totalPago / freteTotal : null;
+
+    return {
+      placa: p.placaOriginal, tipo, relacionamento, cadastrada: !!cadastro,
+      freteColeta: p.freteColeta, pesoColeta: p.pesoColeta, baixaColeta: p.baixaColeta, diasColeta: p.diasColeta.size,
+      freteEntrega: p.freteEntrega, pesoEntrega: p.pesoEntrega, baixaEntrega: p.baixaEntrega, diasEntrega: p.diasEntrega.size,
+      freteTotal, pesoTotal, baixaTotal, diasTotal, servicosPorDia, totalPago, pagoPorTonelada, resultado
+    };
+  }).sort((a, b) => a.placa.localeCompare(b.placa));
+
+  const grupos = {};
+  resultadosPorPlaca.forEach(r => {
+    const g = r.relacionamento || 'OUTRO';
+    if (!grupos[g]) grupos[g] = criarAcumulador();
+    somarNoAcumulador(grupos[g], r);
+  });
+  const totalGeral = criarAcumulador();
+  resultadosPorPlaca.forEach(r => somarNoAcumulador(totalGeral, r));
+  Object.values(grupos).forEach(fecharAcumulador);
+  fecharAcumulador(totalGeral);
+
+  calculoAtual = {
+    unidade: document.getElementById('lc-unidade').value,
+    periodoInicio: document.getElementById('lc-periodo-inicio').value,
+    periodoFim: document.getElementById('lc-periodo-fim').value,
+    nomeArquivo: document.getElementById('lc-arquivo').files[0]?.name || '',
+    eventos, resultadosPorPlaca,
+    totaisPorRelacionamento: grupos, totalGeral,
+    placasDesconhecidas: Array.from(placasDesconhecidas),
+    tiposSemTarifa: Array.from(tiposSemTarifa)
+  };
+
+  exibirRevisao();
+  irParaPasso('revisar');
+}
+
+function criarAcumulador() {
+  return { freteColeta: 0, pesoColeta: 0, baixaColeta: 0, freteEntrega: 0, pesoEntrega: 0, baixaEntrega: 0, freteTotal: 0, pesoTotal: 0, baixaTotal: 0, diasTotal: 0, totalPago: 0, qtdPlacas: 0 };
+}
+function somarNoAcumulador(ac, r) {
+  ac.freteColeta += r.freteColeta; ac.pesoColeta += r.pesoColeta; ac.baixaColeta += r.baixaColeta;
+  ac.freteEntrega += r.freteEntrega; ac.pesoEntrega += r.pesoEntrega; ac.baixaEntrega += r.baixaEntrega;
+  ac.freteTotal += r.freteTotal; ac.pesoTotal += r.pesoTotal; ac.baixaTotal += r.baixaTotal;
+  ac.diasTotal += r.diasTotal; ac.totalPago += (r.totalPago || 0); ac.qtdPlacas += 1;
+}
+function fecharAcumulador(ac) {
+  ac.servicosPorDia = ac.diasTotal > 0 ? ac.baixaTotal / ac.diasTotal : 0;
+  ac.pagoPorTonelada = ac.pesoTotal > 0 ? ac.totalPago / (ac.pesoTotal / 1000) : 0;
+  ac.resultado = ac.freteTotal > 0 ? ac.totalPago / ac.freteTotal : 0;
+}
+
+function exibirRevisao() {
+  const c = calculoAtual;
+  document.getElementById('revisar-resumo').innerHTML = `
+    <strong>${escapeHtml(c.unidade)}</strong> &middot;
+    ${c.periodoInicio.split('-').reverse().join('/')} a ${c.periodoFim.split('-').reverse().join('/')} &middot;
+    ${c.eventos.length} eventos lidos &middot; ${c.resultadosPorPlaca.length} placas
+  `;
+
+  const avisos = [];
+  if (c.placasDesconhecidas.length) {
+    avisos.push(`<strong>${c.placasDesconhecidas.length} placa(s) não cadastrada(s) na Frota</strong> (entraram no total, mas sem tipo/relacionamento/pagamento até você cadastrar): ${c.placasDesconhecidas.map(escapeHtml).join(', ')}`);
+  }
+  if (c.tiposSemTarifa.length) {
+    avisos.push(`<strong>Tipo(s) sem tarifa cadastrada</strong> (pagamento não calculado até cadastrar em "Tarifas"): ${c.tiposSemTarifa.map(escapeHtml).join(', ')}`);
+  }
+  document.getElementById('revisar-avisos').innerHTML = avisos.length
+    ? `<div class="aviso-box"><ul>${avisos.map(a => `<li>${a}</li>`).join('')}</ul></div>` : '';
+
+  document.getElementById('revisar-tabela').innerHTML = montarTabelaResultados(c);
+}
+
+function montarTabelaResultados(c) {
+  const linhaPlaca = (r) => `
+    <tr class="${!r.cadastrada ? 'rv-sem-placa' : ''}">
+      <td>${escapeHtml(r.tipo || '(sem cadastro)')}</td>
+      <td>${escapeHtml(r.placa)}</td>
+      <td>${escapeHtml(r.relacionamento)}</td>
+      <td>${fmtMoeda(r.freteColeta)}</td><td>${fmtNum(r.pesoColeta)}</td><td>${r.baixaColeta}</td>
+      <td>${fmtMoeda(r.freteEntrega)}</td><td>${fmtNum(r.pesoEntrega)}</td><td>${r.baixaEntrega}</td>
+      <td>${fmtMoeda(r.freteTotal)}</td><td>${fmtNum(r.pesoTotal)}</td><td>${r.baixaTotal}</td>
+      <td>${r.diasTotal}</td><td>${fmtNum(r.servicosPorDia, 1)}</td>
+      <td>${r.totalPago !== null ? fmtMoeda(r.totalPago) : '—'}</td>
+      <td>${r.pagoPorTonelada !== null ? fmtMoeda(r.pagoPorTonelada) : '—'}</td>
+      <td>${r.resultado !== null ? fmtPct(r.resultado) : '—'}</td>
+    </tr>`;
+
+  const linhaSubtotal = (nome, ac) => `
+    <tr class="rv-subtotal">
+      <td colspan="3">Subtotal ${escapeHtml(nome)} (${ac.qtdPlacas} placas)</td>
+      <td>${fmtMoeda(ac.freteColeta)}</td><td>${fmtNum(ac.pesoColeta)}</td><td>${ac.baixaColeta}</td>
+      <td>${fmtMoeda(ac.freteEntrega)}</td><td>${fmtNum(ac.pesoEntrega)}</td><td>${ac.baixaEntrega}</td>
+      <td>${fmtMoeda(ac.freteTotal)}</td><td>${fmtNum(ac.pesoTotal)}</td><td>${ac.baixaTotal}</td>
+      <td>${ac.diasTotal}</td><td>${fmtNum(ac.servicosPorDia, 1)}</td>
+      <td>${fmtMoeda(ac.totalPago)}</td><td>${fmtMoeda(ac.pagoPorTonelada)}</td><td>${fmtPct(ac.resultado)}</td>
+    </tr>`;
+
+  let corpo = '';
+  Object.keys(c.totaisPorRelacionamento).sort().forEach(grupo => {
+    corpo += c.resultadosPorPlaca.filter(r => (r.relacionamento || 'OUTRO') === grupo).map(linhaPlaca).join('');
+    corpo += linhaSubtotal(grupo, c.totaisPorRelacionamento[grupo]);
+  });
+
+  return `
+    <div class="table-wrapper">
+      <table class="rv-table">
+        <thead><tr>
+          <th>Tipo</th><th>Placa</th><th>Relac.</th>
+          <th>Frete Coleta</th><th>Peso Coleta</th><th>Baixa Coleta</th>
+          <th>Frete Entrega</th><th>Peso Entrega</th><th>Baixa Entrega</th>
+          <th>Frete Total</th><th>Peso Total</th><th>Baixa Total</th>
+          <th>Dias Trab.</th><th>Serv./dia</th>
+          <th>Total Pago</th><th>Pago/ton.</th><th>Resultado</th>
+        </tr></thead>
+        <tbody>
+          ${corpo}
+          <tr class="rv-total">
+            <td colspan="3">TOTAL GERAL (${c.totalGeral.qtdPlacas} placas)</td>
+            <td>${fmtMoeda(c.totalGeral.freteColeta)}</td><td>${fmtNum(c.totalGeral.pesoColeta)}</td><td>${c.totalGeral.baixaColeta}</td>
+            <td>${fmtMoeda(c.totalGeral.freteEntrega)}</td><td>${fmtNum(c.totalGeral.pesoEntrega)}</td><td>${c.totalGeral.baixaEntrega}</td>
+            <td>${fmtMoeda(c.totalGeral.freteTotal)}</td><td>${fmtNum(c.totalGeral.pesoTotal)}</td><td>${c.totalGeral.baixaTotal}</td>
+            <td>${c.totalGeral.diasTotal}</td><td>${fmtNum(c.totalGeral.servicosPorDia, 1)}</td>
+            <td>${fmtMoeda(c.totalGeral.totalPago)}</td><td>${fmtMoeda(c.totalGeral.pagoPorTonelada)}</td><td>${fmtPct(c.totalGeral.resultado)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function salvarImportacao() {
+  if (!calculoAtual) return;
+  const btn = document.getElementById('btn-salvar-importacao');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  try {
+    await addDoc(collection(db, 'rv_importacoes'), {
+      unidade: calculoAtual.unidade,
+      periodoInicio: calculoAtual.periodoInicio,
+      periodoFim: calculoAtual.periodoFim,
+      nomeArquivo: calculoAtual.nomeArquivo,
+      eventos: calculoAtual.eventos,
+      resultadosPorPlaca: calculoAtual.resultadosPorPlaca,
+      totaisPorRelacionamento: calculoAtual.totaisPorRelacionamento,
+      totalGeral: calculoAtual.totalGeral,
+      criadoEm: serverTimestamp(),
+      criadoPorEmail: auth.currentUser?.email || ''
+    });
+    alert('Semana salva com sucesso!');
+    calculoAtual = null;
+    document.getElementById('lc-arquivo').value = '';
+    document.getElementById('lc-aba').innerHTML = '<option>Escolha o arquivo primeiro...</option>';
+    document.getElementById('lc-aba').disabled = true;
+    irParaPasso('escolher');
+  } catch (err) {
+    alert('Erro ao salvar: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvar semana';
+  }
+}
+
+/* =====================================================================
+   ABA RESULTADOS — ver semanas já salvas
+   ===================================================================== */
+
+async function carregarImportacoesDaUnidade() {
+  const unidade = document.getElementById('rs-unidade').value;
+  const selImp = document.getElementById('rs-importacao');
+  document.getElementById('rs-conteudo').innerHTML = '';
+  if (!unidade) { selImp.innerHTML = '<option value="">Selecione a unidade...</option>'; return; }
+
+  selImp.innerHTML = '<option value="">Carregando...</option>';
+  const snap = await getDocs(query(collection(db, 'rv_importacoes'), where('unidade', '==', unidade)));
+  importacoesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.periodoInicio || '').localeCompare(a.periodoInicio || ''));
+
+  if (importacoesCache.length === 0) {
+    selImp.innerHTML = '<option value="">Nenhuma semana lançada ainda</option>';
+    return;
+  }
+  selImp.innerHTML = '<option value="">Selecione a semana...</option>' + importacoesCache.map(imp => `
+    <option value="${imp.id}">${imp.periodoInicio.split('-').reverse().join('/')} a ${imp.periodoFim.split('-').reverse().join('/')}</option>
+  `).join('');
+}
+
+function exibirImportacaoSelecionada() {
+  const id = document.getElementById('rs-importacao').value;
+  const imp = importacoesCache.find(i => i.id === id);
+  if (!imp) { document.getElementById('rs-conteudo').innerHTML = ''; return; }
+  document.getElementById('rs-conteudo').innerHTML = `
+    <div class="form-card" style="font-size:13.5px;color:#666;">
+      Arquivo original: ${escapeHtml(imp.nomeArquivo || '—')} &middot;
+      Lançado por: ${escapeHtml(imp.criadoPorEmail || '—')}
+    </div>
+    ${montarTabelaResultados(imp)}
+  `;
+}
+
+function exportarResultadoExcel() {
+  const id = document.getElementById('rs-importacao').value;
+  const imp = importacoesCache.find(i => i.id === id);
+  if (!imp) { alert('Selecione uma semana primeiro.'); return; }
+
+  const linhas = imp.resultadosPorPlaca.map(r => ({
+    Tipo: r.tipo, Placa: r.placa, Relacionamento: r.relacionamento,
+    'Frete Coleta': r.freteColeta, 'Peso Coleta': r.pesoColeta, 'Baixa Coleta': r.baixaColeta,
+    'Frete Entrega': r.freteEntrega, 'Peso Entrega': r.pesoEntrega, 'Baixa Entrega': r.baixaEntrega,
+    'Frete Total': r.freteTotal, 'Peso Total': r.pesoTotal, 'Baixa Total': r.baixaTotal,
+    'Dias Trabalhados': r.diasTotal, 'Serviços/dia': r.servicosPorDia,
+    'Total Pago': r.totalPago, 'Pago/Tonelada': r.pagoPorTonelada, 'Resultado': r.resultado
+  }));
+  const planilha = XLSX.utils.json_to_sheet(linhas);
+  const livro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(livro, planilha, 'Resultado');
+  XLSX.writeFile(livro, `Resultado_${imp.unidade}_${imp.periodoInicio}_a_${imp.periodoFim}.xlsx`);
+}
+
+async function excluirImportacaoSelecionada() {
+  const id = document.getElementById('rs-importacao').value;
+  if (!id) { alert('Selecione uma semana primeiro.'); return; }
+  if (!confirm('Excluir esta semana lançada? Essa ação não pode ser desfeita.')) return;
+  await deleteDoc(doc(db, 'rv_importacoes', id));
+  await carregarImportacoesDaUnidade();
+}
+
+/* =====================================================================
+   ABA FROTA — cadastro central de placas
+   ===================================================================== */
+
+async function carregarFrota() {
+  const snap = await getDocs(collection(db, 'veiculos_frota'));
+  frotaCache = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.placa.localeCompare(b.placa));
+}
+
+function renderizarFrota() {
+  const busca = document.getElementById('fr-busca').value.trim().toUpperCase();
+  const filtradas = frotaCache.filter(f =>
+    !busca || f.placa.includes(busca) || (f.tipo || '').toUpperCase().includes(busca));
+
+  document.getElementById('fr-contador').textContent = `${filtradas.length} placa(s)`;
+  document.getElementById('fr-tabela').querySelector('tbody').innerHTML = filtradas.map(f => `
+    <tr>
+      <td><strong>${escapeHtml(f.placa)}</strong></td>
+      <td>${escapeHtml(f.tipo || '')}</td>
+      <td>${escapeHtml(f.relacionamento || '')}</td>
+      <td style="text-align:center;"><span class="badge ${f.ativo === false ? 'badge-off' : 'badge-ok'}">${f.ativo === false ? 'Inativo' : 'Ativo'}</span></td>
+      <td style="text-align:center;">
+        ${souQualidade() ? `
+          <button class="btn btn-sm" data-editar-placa="${escapeHtml(f.id)}">Editar</button>
+          <button class="btn btn-sm btn-danger" data-remover-placa="${escapeHtml(f.id)}">Remover</button>
+        ` : ''}
+      </td>
+    </tr>
+  `).join('');
+
+  document.querySelectorAll('[data-editar-placa]').forEach(btn => {
+    btn.addEventListener('click', () => iniciarEdicaoPlaca(btn.dataset.editarPlaca));
+  });
+  document.querySelectorAll('[data-remover-placa]').forEach(btn => {
+    btn.addEventListener('click', () => removerPlaca(btn.dataset.removerPlaca));
+  });
+}
+
+function iniciarEdicaoPlaca(id) {
+  const f = frotaCache.find(x => x.id === id);
+  if (!f) return;
+  editandoPlaca = id;
+  document.getElementById('fr-placa').value = f.placa;
+  document.getElementById('fr-tipo').value = f.tipo || '';
+  document.getElementById('fr-relacionamento').value = f.relacionamento || 'FROTA';
+  document.getElementById('fr-ativo').value = f.ativo === false ? '0' : '1';
+  document.getElementById('btn-cancelar-edicao-placa').style.display = 'inline-block';
+  document.getElementById('card-form-placa').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelarEdicaoPlaca() {
+  editandoPlaca = null;
+  document.getElementById('fr-placa').value = '';
+  document.getElementById('fr-tipo').value = '';
+  document.getElementById('fr-relacionamento').value = 'FROTA';
+  document.getElementById('fr-ativo').value = '1';
+  document.getElementById('btn-cancelar-edicao-placa').style.display = 'none';
+}
+
+async function salvarPlaca() {
+  const placa = normPlaca(document.getElementById('fr-placa').value);
+  const tipo = document.getElementById('fr-tipo').value.trim();
+  const relacionamento = document.getElementById('fr-relacionamento').value;
+  const ativo = document.getElementById('fr-ativo').value === '1';
+  if (!placa || !tipo) { alert('Preencha ao menos a placa e o tipo.'); return; }
+
+  await setDoc(doc(db, 'veiculos_frota', placa), {
+    placa, tipo, relacionamento, ativo, atualizadoEm: serverTimestamp()
+  }, { merge: true });
+
+  cancelarEdicaoPlaca();
+  await carregarFrota();
+  renderizarFrota();
+}
+
+async function removerPlaca(id) {
+  if (!confirm(`Remover a placa ${id} do cadastro central? O histórico de semanas já lançadas não é afetado.`)) return;
+  await deleteDoc(doc(db, 'veiculos_frota', id));
+  await carregarFrota();
+  renderizarFrota();
+}
+
+function importarListaDePlacas(ev) {
+  const arquivo = ev.target.files[0];
+  if (!arquivo) return;
+  const leitor = new FileReader();
+  leitor.onload = async (e) => {
+    const livro = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+    const aba = livro.Sheets[livro.SheetNames[0]];
+    const linhas = XLSX.utils.sheet_to_json(aba, { header: 1, defval: '', raw: false });
+    const idxCabecalho = linhas.findIndex(l => l.some(c => String(c).trim() !== ''));
+    const cabecalho = linhas[idxCabecalho].map(c => String(c || '').trim().toLowerCase());
+    const corpo = linhas.slice(idxCabecalho + 1).filter(l => l.some(c => String(c).trim() !== ''));
+
+    const iPlaca = cabecalho.findIndex(c => c.includes('placa'));
+    const iTipo = cabecalho.findIndex(c => c.includes('tipo'));
+    const iRelac = cabecalho.findIndex(c => c.includes('relac'));
+    if (iPlaca < 0) { alert('Não encontrei uma coluna de PLACA nessa planilha.'); return; }
+
+    const avisos = document.getElementById('fr-import-avisos');
+    avisos.innerHTML = `<div class="aviso-box">Importando ${corpo.length} linha(s)...</div>`;
+
+    const lote = writeBatch(db);
+    let total = 0;
+    corpo.forEach(linha => {
+      const placa = normPlaca(linha[iPlaca]);
+      if (!placa) return;
+      const tipo = iTipo >= 0 ? String(linha[iTipo] || '').trim() : '';
+      const relacionamento = iRelac >= 0 ? normTipo(linha[iRelac]) || 'OUTRO' : 'OUTRO';
+      lote.set(doc(db, 'veiculos_frota', placa), { placa, tipo, relacionamento, ativo: true, atualizadoEm: serverTimestamp() }, { merge: true });
+      total++;
+    });
+    await lote.commit();
+
+    avisos.innerHTML = `<div class="aviso-box">${total} placa(s) importada(s)/atualizada(s) com sucesso.</div>`;
+    ev.target.value = '';
+    await carregarFrota();
+    renderizarFrota();
+  };
+  leitor.readAsArrayBuffer(arquivo);
+}
+
+/* =====================================================================
+   ABA TARIFAS — diária + valor por serviço, por tipo
+   ===================================================================== */
+
+async function carregarTarifas() {
+  const snap = await getDocs(collection(db, 'rv_tarifas'));
+  tarifasCache = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.tipo.localeCompare(b.tipo));
+}
+
+function renderizarTarifas() {
+  document.getElementById('tf-tabela').innerHTML = tarifasCache.map(t => `
+    <tr>
+      <td>${escapeHtml(t.tipo)}</td>
+      <td>${fmtMoeda(t.diaria)}</td>
+      <td>${fmtMoeda(t.valorServico)}</td>
+      <td style="text-align:center;">
+        <button class="btn btn-sm" data-editar-tarifa="${escapeHtml(t.id)}">Editar</button>
+        <button class="btn btn-sm btn-danger" data-remover-tarifa="${escapeHtml(t.id)}">Remover</button>
+      </td>
+    </tr>
+  `).join('');
+
+  document.querySelectorAll('[data-editar-tarifa]').forEach(btn => {
+    btn.addEventListener('click', () => iniciarEdicaoTarifa(btn.dataset.editarTarifa));
+  });
+  document.querySelectorAll('[data-remover-tarifa]').forEach(btn => {
+    btn.addEventListener('click', () => removerTarifa(btn.dataset.removerTarifa));
+  });
+}
+
+function iniciarEdicaoTarifa(id) {
+  const t = tarifasCache.find(x => x.id === id);
+  if (!t) return;
+  editandoTarifa = id;
+  document.getElementById('tf-tipo').value = t.tipo;
+  document.getElementById('tf-diaria').value = t.diaria;
+  document.getElementById('tf-valor-servico').value = t.valorServico;
+  document.getElementById('btn-cancelar-edicao-tarifa').style.display = 'inline-block';
+}
+
+function cancelarEdicaoTarifa() {
+  editandoTarifa = null;
+  document.getElementById('tf-tipo').value = '';
+  document.getElementById('tf-diaria').value = '';
+  document.getElementById('tf-valor-servico').value = '';
+  document.getElementById('btn-cancelar-edicao-tarifa').style.display = 'none';
+}
+
+async function salvarTarifa() {
+  const tipo = document.getElementById('tf-tipo').value.trim();
+  const diaria = parseFloat(document.getElementById('tf-diaria').value) || 0;
+  const valorServico = parseFloat(document.getElementById('tf-valor-servico').value) || 0;
+  if (!tipo) { alert('Preencha o tipo.'); return; }
+
+  const id = normTipo(tipo);
+  await setDoc(doc(db, 'rv_tarifas', id), { tipo, diaria, valorServico, atualizadoEm: serverTimestamp() }, { merge: true });
+  cancelarEdicaoTarifa();
+  await carregarTarifas();
+  renderizarTarifas();
+}
+
+async function removerTarifa(id) {
+  if (!confirm(`Remover a tarifa "${id}"?`)) return;
+  await deleteDoc(doc(db, 'rv_tarifas', id));
+  await carregarTarifas();
+  renderizarTarifas();
+}
+</script>
+</body>
+</html>
