@@ -210,7 +210,7 @@
           <span style="flex:1"></span>
           <label class="btn" style="margin:0;">
             Importar lista de placas (Excel)
-            <input type="file" id="fr-importar-arquivo" accept=".xlsx,.xls,.xlsm" style="display:none;">
+            <input type="file" id="fr-importar-arquivo" accept=".xlsx,.xls,.xlsm,.csv,.txt,.sswweb" style="display:none;">
           </label>
         </div>
         <div id="fr-import-avisos"></div>
@@ -235,14 +235,15 @@
       <div class="form-card">
         <h3>Comparar com uma planilha nova</h3>
         <p style="font-size:13.5px;color:#666;margin-bottom:14px;">
-          Escolhe uma planilha de placas atualizada (mesmo formato: PLACA / TIPO / RELACIONAMENTO) e eu mostro
-          o que é novo, o que não aparece mais e o que mudou, comparando com o cadastro de hoje.
+          Escolhe uma planilha de placas atualizada (Excel com PLACA / TIPO / RELACIONAMENTO) <strong>ou</strong> o
+          relatório "Relações de Veículos" exportado direto do SSW — e eu mostro o que é novo, o que não aparece
+          mais e o que mudou, comparando com o cadastro de hoje.
           <strong>Isso aqui só mostra — nada é gravado no cadastro.</strong>
         </p>
         <div class="form-row col2">
           <div class="form-group">
-            <label>Planilha pra comparar (.xlsx, .xls ou .xlsm)</label>
-            <input type="file" id="cp-arquivo" accept=".xlsx,.xls,.xlsm">
+            <label>Planilha ou relatório pra comparar (.xlsx/.xls/.xlsm ou o relatório de texto do SSW, .sswweb/.csv/.txt)</label>
+            <input type="file" id="cp-arquivo" accept=".xlsx,.xls,.xlsm,.csv,.txt,.sswweb">
           </div>
         </div>
         <div class="btn-group">
@@ -1102,13 +1103,70 @@ function extrairPlacasDeLivro(livro) {
   return { mapa, erro: null };
 }
 
+// Lê o relatório "RELAÇÕES DE VEÍCULOS" exportado direto do SSW (texto com
+// campos separados por ponto-e-vírgula, uma linha de título começando com
+// "0;", uma linha de cabeçalho começando com "1;" e uma linha por veículo
+// começando com "2;"). É a mesma informação do Placas.xlsm, só que direto do
+// sistema da frota, sem passar por cópia manual - então é a fonte preferida
+// quando disponível.
+function extrairPlacasDeTextoSSW(texto) {
+  const linhas = texto.split(/\r?\n/).filter(l => l.trim() !== '');
+  let indice = { PLACA: 1, TIPO: 2, RELACIONAMENTO: 3 }; // posições padrão do relatório
+  const mapa = new Map();
+
+  linhas.forEach(linha => {
+    const campos = linha.split(';');
+    const tipoLinha = campos[0].trim();
+
+    if (tipoLinha === '1') {
+      // linha de cabeçalho - remonta o índice pelos nomes, caso a ordem das
+      // colunas desse relatório mude no futuro.
+      const novoIndice = {};
+      campos.forEach((nome, i) => {
+        const chave = String(nome || '').trim().toUpperCase();
+        if (chave) novoIndice[chave] = i;
+      });
+      if ('PLACA' in novoIndice) indice = novoIndice;
+      return;
+    }
+    if (tipoLinha !== '2') return; // ignora a linha de título (0) e qualquer outra coisa
+
+    const placaBruta = campos[indice.PLACA];
+    const placaChave = normPlaca(placaBruta);
+    if (!placaChave) return;
+
+    mapa.set(placaChave, {
+      placa: String(placaBruta || '').trim().toUpperCase(),
+      tipo: String(campos[indice.TIPO] || '').trim(),
+      relacionamento: normTipo(campos[indice.RELACIONAMENTO]) || 'OUTRO'
+    });
+  });
+
+  return { mapa, erro: mapa.size === 0 ? 'Não encontrei nenhuma placa nesse arquivo.' : null };
+}
+
+// Ponto único de leitura de arquivo de placas — aceita tanto planilha Excel
+// (.xlsx/.xls/.xlsm) quanto o relatório de texto exportado direto do SSW
+// (.sswweb/.csv/.txt ou qualquer outra extensão de texto).
+function lerArquivoDePlacas(arquivo, callback) {
+  const ehExcel = /\.(xlsx|xls|xlsm)$/i.test(arquivo.name || '');
+  const leitor = new FileReader();
+  leitor.onload = (e) => {
+    if (ehExcel) {
+      const livro = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      callback(extrairPlacasDeLivro(livro));
+    } else {
+      callback(extrairPlacasDeTextoSSW(String(e.target.result || '')));
+    }
+  };
+  if (ehExcel) leitor.readAsArrayBuffer(arquivo);
+  else leitor.readAsText(arquivo, 'utf-8');
+}
+
 function importarListaDePlacas(ev) {
   const arquivo = ev.target.files[0];
   if (!arquivo) return;
-  const leitor = new FileReader();
-  leitor.onload = async (e) => {
-    const livro = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-    const { mapa, erro } = extrairPlacasDeLivro(livro);
+  lerArquivoDePlacas(arquivo, async ({ mapa, erro }) => {
     if (erro) { alert(erro); return; }
 
     const avisos = document.getElementById('fr-import-avisos');
@@ -1131,8 +1189,7 @@ function importarListaDePlacas(ev) {
     ev.target.value = '';
     await carregarFrota();
     renderizarFrota();
-  };
-  leitor.readAsArrayBuffer(arquivo);
+  });
 }
 
 /* =====================================================================
@@ -1144,10 +1201,7 @@ function importarListaDePlacas(ev) {
 function compararPlanilhaDePlacas(ev) {
   const arquivo = ev.target.files[0];
   if (!arquivo) return;
-  const leitor = new FileReader();
-  leitor.onload = (e) => {
-    const livro = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-    const { mapa: novas, erro } = extrairPlacasDeLivro(livro);
+  lerArquivoDePlacas(arquivo, ({ mapa: novas, erro }) => {
     const resultadoEl = document.getElementById('cp-resultado');
     if (erro) { resultadoEl.innerHTML = `<div class="aviso-box">${escapeHtml(erro)}</div>`; return; }
 
@@ -1203,8 +1257,7 @@ function compararPlanilhaDePlacas(ev) {
         ['Placa', r => r.placa], ['Tipo antes', r => r.tipoAntes], ['Tipo agora', r => r.tipoDepois], ['Relac. antes', r => r.relacAntes], ['Relac. agora', r => r.relacDepois]
       ])}
     `;
-  };
-  leitor.readAsArrayBuffer(arquivo);
+  });
 }
 
 function exportarComparacaoPlacas() {
