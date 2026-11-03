@@ -35,7 +35,11 @@
   .btn-sm { padding: 5px 10px; font-size: 12px; }
   .btn-group { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
 
-  .table-wrapper { overflow-x: auto; max-width: 100%; border: 1px solid #ddd; border-radius: 6px; background: white; margin-top: 10px; }
+  .table-wrapper { overflow-x: auto; max-width: 100%; border: 1px solid #ddd; border-radius: 6px; background: white; margin-top: 10px; scrollbar-width: auto; }
+  .table-wrapper::-webkit-scrollbar { height: 14px; }
+  .table-wrapper::-webkit-scrollbar-track { background: #f1f1f1; }
+  .table-wrapper::-webkit-scrollbar-thumb { background: #aaa; border-radius: 7px; }
+  .table-wrapper::-webkit-scrollbar-thumb:hover { background: #888; }
   table.rv-table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 1350px; }
   table.rv-table th { background: var(--qc-primary); padding: 10px 8px; text-align: right; font-weight: 600; color: white; white-space: nowrap; position: sticky; top: 0; }
   table.rv-table th:nth-child(1), table.rv-table th:nth-child(2), table.rv-table th:nth-child(3) { text-align: left; }
@@ -585,12 +589,15 @@ function lerArquivoPlanilha() {
   leitor.readAsArrayBuffer(arquivo);
 }
 
+// Nomes de coluna EXATOS (match completo, prioridade 1) e PARTES de nome
+// (match por "contém", prioridade 2) - a planilha real da SSW usa nomes como
+// "PESO CALCULO" e "VLR FRETE", que não batem 100% com "peso"/"frete" sozinhos.
 const SINONIMOS_COLUNA = {
-  placa: ['placa'],
-  tipoBaixa: ['tipo baixa', 'tipo_baixa', 'tipobaixa'],
-  data: ['data baixa', 'data_baixa', 'databaixa', 'data'],
-  peso: ['peso'],
-  frete: ['frete-r$', 'frete r$', 'frete', 'valor frete']
+  placa: { exatos: ['placa'], contem: ['placa'] },
+  tipoBaixa: { exatos: ['tipo baixa', 'tipo_baixa', 'tipobaixa'], contem: ['tipo baixa', 'tipobaixa'] },
+  data: { exatos: ['data baixa', 'data_baixa', 'databaixa', 'data'], contem: ['data baixa', 'databaixa'] },
+  peso: { exatos: ['peso', 'peso calculo', 'peso cálculo', 'peso kg'], contem: ['peso'] },
+  frete: { exatos: ['frete-r$', 'frete r$', 'frete', 'valor frete', 'vlr frete', 'vlr. frete'], contem: ['frete'] }
 };
 
 function irParaMapeamento() {
@@ -614,9 +621,16 @@ function irParaMapeamento() {
   const corpo = linhas.slice(idxCabecalho + 1).filter(l => l.some(c => String(c).trim() !== ''));
   planilhaLida = { cabecalho, corpo };
 
+  // Primeiro tenta achar um nome de coluna EXATAMENTE igual a um dos
+  // sinônimos; se não achar, tenta achar uma coluna cujo nome CONTENHA um
+  // dos sinônimos (ex: "PESO CALCULO" contém "peso", "VLR FRETE" contém
+  // "frete") - isso é o que faltava pra detectar sozinho o arquivo real
+  // exportado do SSW, que não usa os nomes de coluna "do jeito certo".
   const detectar = (chave) => {
     const sin = SINONIMOS_COLUNA[chave];
-    const i = cabecalho.findIndex(c => sin.includes(c.toLowerCase().trim()));
+    const normalizados = cabecalho.map(c => c.toLowerCase().trim());
+    let i = normalizados.findIndex(c => sin.exatos.includes(c));
+    if (i < 0) i = normalizados.findIndex(c => sin.contem.some(parte => c.includes(parte)));
     return i;
   };
 
@@ -867,6 +881,10 @@ function montarTabelaResultados(c) {
   });
 
   return `
+    <div class="aviso-box aviso-info" style="margin-top:0; margin-bottom:0;">
+      Essa tabela tem mais colunas pro lado direito (Total Pago, Produção Transf., Pago/ton., Resultado...) —
+      arraste a barra de rolagem embaixo da tabela (ou use o touchpad/roda do mouse na horizontal) pra ver todas.
+    </div>
     <div class="table-wrapper">
       <table class="rv-table">
         <thead><tr>
@@ -943,6 +961,10 @@ function montarTabelaResultadosEditavel(c) {
   });
 
   return `
+    <div class="aviso-box aviso-info" style="margin-top:0; margin-bottom:0;">
+      Essa tabela tem mais colunas pro lado direito (Total Pago, Produção Transf., Pago/ton., Resultado...) —
+      arraste a barra de rolagem embaixo da tabela (ou use o touchpad/roda do mouse na horizontal) pra ver todas.
+    </div>
     <div class="table-wrapper">
       <table class="rv-table">
         <thead><tr>
