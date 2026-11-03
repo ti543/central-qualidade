@@ -76,6 +76,7 @@
       <button class="tab-btn active" data-tab="lancar">Lançar Semana</button>
       <button class="tab-btn" data-tab="resultados">Resultados</button>
       <button class="tab-btn" data-tab="frota">Frota (Placas)</button>
+      <button class="tab-btn" data-tab="comparar">Comparar Placas</button>
       <button class="tab-btn" id="aba-tarifas" data-tab="tarifas" style="display:none;">Tarifas</button>
     </div>
 
@@ -228,6 +229,30 @@
     </div>
 
     <!-- ===================================================================
+         ABA — COMPARAR PLACAS (só visualização; não grava nada)
+         =================================================================== -->
+    <div class="tab-content" id="tab-comparar">
+      <div class="form-card">
+        <h3>Comparar com uma planilha nova</h3>
+        <p style="font-size:13.5px;color:#666;margin-bottom:14px;">
+          Escolhe uma planilha de placas atualizada (mesmo formato: PLACA / TIPO / RELACIONAMENTO) e eu mostro
+          o que é novo, o que não aparece mais e o que mudou, comparando com o cadastro de hoje.
+          <strong>Isso aqui só mostra — nada é gravado no cadastro.</strong>
+        </p>
+        <div class="form-row col2">
+          <div class="form-group">
+            <label>Planilha pra comparar (.xlsx, .xls ou .xlsm)</label>
+            <input type="file" id="cp-arquivo" accept=".xlsx,.xls,.xlsm">
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn" id="btn-exportar-comparacao">Exportar comparação (Excel)</button>
+        </div>
+      </div>
+      <div id="cp-resultado"></div>
+    </div>
+
+    <!-- ===================================================================
          ABA 4 — TARIFAS (diária + valor por serviço, por tipo)
          =================================================================== -->
     <div class="tab-content" id="tab-tarifas">
@@ -372,6 +397,9 @@ function ligarEventos() {
   document.getElementById('btn-cancelar-edicao-placa').addEventListener('click', cancelarEdicaoPlaca);
   document.getElementById('fr-busca').addEventListener('input', renderizarFrota);
   document.getElementById('fr-importar-arquivo').addEventListener('change', importarListaDePlacas);
+
+  document.getElementById('cp-arquivo').addEventListener('change', compararPlanilhaDePlacas);
+  document.getElementById('btn-exportar-comparacao').addEventListener('click', exportarComparacaoPlacas);
 
   document.getElementById('btn-salvar-tarifa').addEventListener('click', salvarTarifa);
   document.getElementById('btn-cancelar-edicao-tarifa').addEventListener('click', cancelarEdicaoTarifa);
@@ -1043,37 +1071,61 @@ async function removerPlaca(id) {
   renderizarFrota();
 }
 
+// Lê uma planilha de placas (PLACA/TIPO/RELACIONAMENTO, em qualquer ordem de
+// coluna, cabeçalho detectado por nome) e devolve um Map chave->{placa,tipo,
+// relacionamento}. Usado tanto pra importar de vez quanto pra só comparar
+// sem gravar nada.
+function extrairPlacasDeLivro(livro) {
+  const aba = livro.Sheets[livro.SheetNames[0]];
+  const linhas = XLSX.utils.sheet_to_json(aba, { header: 1, defval: '', raw: false });
+  const idxCabecalho = linhas.findIndex(l => l.some(c => String(c).trim() !== ''));
+  if (idxCabecalho < 0) return { mapa: new Map(), erro: 'Planilha vazia.' };
+
+  const cabecalho = linhas[idxCabecalho].map(c => String(c || '').trim().toLowerCase());
+  const corpo = linhas.slice(idxCabecalho + 1).filter(l => l.some(c => String(c).trim() !== ''));
+
+  const iPlaca = cabecalho.findIndex(c => c.includes('placa'));
+  const iTipo = cabecalho.findIndex(c => c.includes('tipo'));
+  const iRelac = cabecalho.findIndex(c => c.includes('relac'));
+  if (iPlaca < 0) return { mapa: new Map(), erro: 'Não encontrei uma coluna de PLACA nessa planilha.' };
+
+  const mapa = new Map();
+  corpo.forEach(linha => {
+    const placaChave = normPlaca(linha[iPlaca]);
+    if (!placaChave) return;
+    mapa.set(placaChave, {
+      placa: String(linha[iPlaca]).trim().toUpperCase(),
+      tipo: iTipo >= 0 ? String(linha[iTipo] || '').trim() : '',
+      relacionamento: iRelac >= 0 ? (normTipo(linha[iRelac]) || 'OUTRO') : 'OUTRO'
+    });
+  });
+  return { mapa, erro: null };
+}
+
 function importarListaDePlacas(ev) {
   const arquivo = ev.target.files[0];
   if (!arquivo) return;
   const leitor = new FileReader();
   leitor.onload = async (e) => {
     const livro = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-    const aba = livro.Sheets[livro.SheetNames[0]];
-    const linhas = XLSX.utils.sheet_to_json(aba, { header: 1, defval: '', raw: false });
-    const idxCabecalho = linhas.findIndex(l => l.some(c => String(c).trim() !== ''));
-    const cabecalho = linhas[idxCabecalho].map(c => String(c || '').trim().toLowerCase());
-    const corpo = linhas.slice(idxCabecalho + 1).filter(l => l.some(c => String(c).trim() !== ''));
-
-    const iPlaca = cabecalho.findIndex(c => c.includes('placa'));
-    const iTipo = cabecalho.findIndex(c => c.includes('tipo'));
-    const iRelac = cabecalho.findIndex(c => c.includes('relac'));
-    if (iPlaca < 0) { alert('Não encontrei uma coluna de PLACA nessa planilha.'); return; }
+    const { mapa, erro } = extrairPlacasDeLivro(livro);
+    if (erro) { alert(erro); return; }
 
     const avisos = document.getElementById('fr-import-avisos');
-    avisos.innerHTML = `<div class="aviso-box">Importando ${corpo.length} linha(s)...</div>`;
+    avisos.innerHTML = `<div class="aviso-box">Importando ${mapa.size} placa(s)...</div>`;
 
-    const lote = writeBatch(db);
+    const itens = Array.from(mapa.values());
     let total = 0;
-    corpo.forEach(linha => {
-      const placa = normPlaca(linha[iPlaca]);
-      if (!placa) return;
-      const tipo = iTipo >= 0 ? String(linha[iTipo] || '').trim() : '';
-      const relacionamento = iRelac >= 0 ? normTipo(linha[iRelac]) || 'OUTRO' : 'OUTRO';
-      lote.set(doc(db, 'veiculos_frota', placa), { placa, tipo, relacionamento, ativo: true, atualizadoEm: serverTimestamp() }, { merge: true });
-      total++;
-    });
-    await lote.commit();
+    for (let i = 0; i < itens.length; i += 450) {
+      const lote = writeBatch(db);
+      itens.slice(i, i + 450).forEach(dados => {
+        lote.set(doc(db, 'veiculos_frota', normPlaca(dados.placa)), {
+          placa: dados.placa, tipo: dados.tipo, relacionamento: dados.relacionamento, ativo: true, atualizadoEm: serverTimestamp()
+        }, { merge: true });
+        total++;
+      });
+      await lote.commit();
+    }
 
     avisos.innerHTML = `<div class="aviso-box">${total} placa(s) importada(s)/atualizada(s) com sucesso.</div>`;
     ev.target.value = '';
@@ -1081,6 +1133,88 @@ function importarListaDePlacas(ev) {
     renderizarFrota();
   };
   leitor.readAsArrayBuffer(arquivo);
+}
+
+/* =====================================================================
+   COMPARAR PLANILHA — só mostra as diferenças entre o cadastro atual e uma
+   planilha nova (não grava nada; é só pra você ver o que mudou antes de
+   decidir importar).
+   ===================================================================== */
+
+function compararPlanilhaDePlacas(ev) {
+  const arquivo = ev.target.files[0];
+  if (!arquivo) return;
+  const leitor = new FileReader();
+  leitor.onload = (e) => {
+    const livro = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+    const { mapa: novas, erro } = extrairPlacasDeLivro(livro);
+    const resultadoEl = document.getElementById('cp-resultado');
+    if (erro) { resultadoEl.innerHTML = `<div class="aviso-box">${escapeHtml(erro)}</div>`; return; }
+
+    const atuaisPorChave = new Map(frotaCache.map(f => [normPlaca(f.placa), f]));
+
+    const entraram = [];   // está na planilha nova, não está no cadastro
+    const saidas = [];     // está no cadastro, não apareceu na planilha nova
+    const mudaram = [];    // está nos dois, mas tipo ou relacionamento é diferente
+
+    novas.forEach((dados, chave) => {
+      const atual = atuaisPorChave.get(chave);
+      if (!atual) {
+        entraram.push(dados);
+      } else if (normTipo(atual.tipo) !== normTipo(dados.tipo) || normTipo(atual.relacionamento) !== normTipo(dados.relacionamento)) {
+        mudaram.push({ placa: dados.placa, tipoAntes: atual.tipo, relacAntes: atual.relacionamento, tipoDepois: dados.tipo, relacDepois: dados.relacionamento });
+      }
+    });
+    atuaisPorChave.forEach((atual, chave) => {
+      if (!novas.has(chave)) saidas.push(atual);
+    });
+
+    entraram.sort((a, b) => a.placa.localeCompare(b.placa));
+    saidas.sort((a, b) => a.placa.localeCompare(b.placa));
+    mudaram.sort((a, b) => a.placa.localeCompare(b.placa));
+
+    window._rvComparacao = { entraram, saidas, mudaram };
+
+    const tabela = (titulo, linhas, colunas) => `
+      <div class="form-card">
+        <h3>${titulo} <span class="pill-contador">${linhas.length}</span></h3>
+        ${linhas.length === 0 ? '<p style="color:#888;font-size:13.5px;">Nenhuma.</p>' : `
+          <div class="table-wrapper">
+            <table class="rv-table" style="min-width:100%;">
+              <thead><tr>${colunas.map(c => `<th>${escapeHtml(c[0])}</th>`).join('')}</tr></thead>
+              <tbody>${linhas.map(l => `<tr>${colunas.map(c => `<td>${escapeHtml(String(c[1](l) ?? ''))}</td>`).join('')}</tr>`).join('')}</tbody>
+            </table>
+          </div>
+        `}
+      </div>
+    `;
+
+    resultadoEl.innerHTML = `
+      <div class="aviso-box aviso-info">
+        Comparação só pra visualizar — nada foi gravado no cadastro. Planilha nova: ${novas.size} placa(s) &middot; Cadastro atual: ${frotaCache.length} placa(s).
+      </div>
+      ${tabela('Placas novas (estão na planilha, ainda não no cadastro)', entraram, [
+        ['Placa', r => r.placa], ['Tipo', r => r.tipo], ['Relacionamento', r => r.relacionamento]
+      ])}
+      ${tabela('Placas que não aparecem mais na planilha (avalie se saíram da frota)', saidas, [
+        ['Placa', r => r.placa], ['Tipo', r => r.tipo], ['Relacionamento', r => r.relacionamento]
+      ])}
+      ${tabela('Placas que mudaram de tipo ou relacionamento', mudaram, [
+        ['Placa', r => r.placa], ['Tipo antes', r => r.tipoAntes], ['Tipo agora', r => r.tipoDepois], ['Relac. antes', r => r.relacAntes], ['Relac. agora', r => r.relacDepois]
+      ])}
+    `;
+  };
+  leitor.readAsArrayBuffer(arquivo);
+}
+
+function exportarComparacaoPlacas() {
+  const c = window._rvComparacao;
+  if (!c) { alert('Compare uma planilha primeiro.'); return; }
+  const livro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(livro, XLSX.utils.json_to_sheet(c.entraram.map(r => ({ Placa: r.placa, Tipo: r.tipo, Relacionamento: r.relacionamento }))), 'Novas');
+  XLSX.utils.book_append_sheet(livro, XLSX.utils.json_to_sheet(c.saidas.map(r => ({ Placa: r.placa, Tipo: r.tipo, Relacionamento: r.relacionamento }))), 'Sairam');
+  XLSX.utils.book_append_sheet(livro, XLSX.utils.json_to_sheet(c.mudaram.map(r => ({ Placa: r.placa, 'Tipo antes': r.tipoAntes, 'Tipo agora': r.tipoDepois, 'Relac antes': r.relacAntes, 'Relac agora': r.relacDepois }))), 'Mudaram');
+  XLSX.writeFile(livro, `Comparacao_placas_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 /* =====================================================================
