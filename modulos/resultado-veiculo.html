@@ -44,12 +44,20 @@
   .table-wrapper::-webkit-scrollbar-thumb { background: #aaa; border-radius: 7px; }
   .table-wrapper::-webkit-scrollbar-thumb:hover { background: #888; }
   table.rv-table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 1350px; }
-  table.rv-table th { background: var(--qc-primary); padding: 10px 8px; text-align: right; font-weight: 600; color: white; white-space: nowrap; position: sticky; top: 0; }
+  table.rv-table th { background: var(--qc-primary); padding: 10px 8px; text-align: right; font-weight: 600; color: white; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
   table.rv-table th:nth-child(1), table.rv-table th:nth-child(2), table.rv-table th:nth-child(3) { text-align: left; }
   table.rv-table td { padding: 8px 8px; border-bottom: 1px solid #eee; vertical-align: middle; white-space: nowrap; color: #444; text-align: right; }
   table.rv-table td:nth-child(1), table.rv-table td:nth-child(2), table.rv-table td:nth-child(3) { text-align: left; }
+  table.rv-table tbody tr { background: #fff; }
   table.rv-table tr:hover { background: #f1f5f9; }
   table.rv-table tr.rv-subtotal { background: #eef0fa; font-weight: 700; }
+
+  /* Tipo e Placa ficam fixas ao rolar a tabela pro lado, igual "congelar
+     painéis" do Excel — sempre dá pra saber de qual placa é cada valor. */
+  table.rv-table th:nth-child(1), table.rv-table td:nth-child(1) { position: sticky; left: 0; width: 76px; min-width: 76px; max-width: 76px; overflow: hidden; text-overflow: ellipsis; }
+  table.rv-table th:nth-child(2), table.rv-table td:nth-child(2) { position: sticky; left: 76px; width: 96px; min-width: 96px; max-width: 96px; overflow: hidden; text-overflow: ellipsis; border-right: 2px solid #ccc; }
+  table.rv-table th:nth-child(1), table.rv-table th:nth-child(2) { z-index: 3; }
+  table.rv-table td:nth-child(1), table.rv-table td:nth-child(2) { z-index: 1; background: inherit; }
   table.rv-table tr.rv-total { background: #000; color: #fff; font-weight: 700; }
   table.rv-table tr.rv-total td { color: #fff; }
   table.rv-table tr.rv-sem-placa td:nth-child(2) { color: #c65911; font-weight: 700; }
@@ -64,6 +72,13 @@
   table.rv-table tr.rv-linha-frota { background: #2e75b6; color: #fff; }
   table.rv-table tr.rv-linha-frota td { color: #fff; }
   table.rv-table tr.rv-linha-frota:hover { background: #255f94; }
+
+  /* Subtotal de AGREGADO/FROTA fica na mesma cor do grupo, só em negrito
+     (herda o negrito de .rv-subtotal) — carreteiro/outro mantém o cinza. */
+  table.rv-table tr.rv-subtotal.rv-linha-agregado,
+  table.rv-table tr.rv-subtotal.rv-linha-agregado td { background: #538135; color: #fff; }
+  table.rv-table tr.rv-subtotal.rv-linha-frota,
+  table.rv-table tr.rv-subtotal.rv-linha-frota td { background: #2e75b6; color: #fff; }
 
   .badge { display: inline-block; padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 600; }
   .badge-ok { background: #d4edda; color: #155724; }
@@ -156,6 +171,7 @@
           <div id="revisar-tabela"></div>
           <div class="btn-group">
             <button class="btn" id="btn-voltar-revisar">&larr; Voltar</button>
+            <button class="btn" id="btn-exportar-revisao">Exportar Excel</button>
             <button class="btn btn-primary" id="btn-salvar-importacao">Salvar semana</button>
           </div>
         </div>
@@ -169,7 +185,7 @@
     <div class="tab-content" id="tab-resultados">
       <div class="form-card">
         <h3>Semanas lançadas</h3>
-        <div class="form-row col3">
+        <div class="form-row col2">
           <div class="form-group">
             <label>Unidade</label>
             <select id="rs-unidade"></select>
@@ -178,13 +194,11 @@
             <label>Semana</label>
             <select id="rs-importacao"><option value="">Selecione a unidade...</option></select>
           </div>
-          <div class="form-group" style="justify-content:flex-end;">
-            <div class="btn-group" style="margin-top:0;">
-              <button class="btn" id="btn-exportar-resultado">Exportar Excel</button>
-              <button class="btn" id="btn-editar-valores" style="display:none;">Editar valores manuais</button>
-              <button class="btn btn-danger" id="btn-excluir-importacao" style="display:none;">Excluir semana</button>
-            </div>
-          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn" id="btn-exportar-resultado">Exportar Excel</button>
+          <button class="btn" id="btn-editar-valores" style="display:none;">Editar valores manuais</button>
+          <button class="btn btn-danger" id="btn-excluir-importacao" style="display:none;">Excluir semana</button>
         </div>
       </div>
       <div id="rs-conteudo"></div>
@@ -401,7 +415,7 @@ import {
 import { initLayout, escapeHtml } from '../assets/layout.js';
 
 const MODULO = 'resultado-veiculo';
-const UNIDADES_PADRAO = ['CMP', 'RSL', 'GRU', 'POA', 'CTB', 'ITJ', 'MTZ'];
+const UNIDADES_PADRAO = ['CMP', 'RSL', 'GRU', 'POA', 'CTB', 'ITJ'];
 
 let perfil = null;
 let frotaCache = [];     // [{id(placa), placa, tipo, relacionamento, ativo}]
@@ -606,6 +620,7 @@ function ligarEventos() {
   document.getElementById('btn-voltar-mapear').addEventListener('click', () => irParaPasso('escolher'));
   document.getElementById('btn-calcular').addEventListener('click', calcularResultadoSemana);
   document.getElementById('btn-voltar-revisar').addEventListener('click', () => irParaPasso('mapear'));
+  document.getElementById('btn-exportar-revisao').addEventListener('click', exportarRevisaoExcel);
   document.getElementById('btn-salvar-importacao').addEventListener('click', salvarImportacao);
 
   document.getElementById('rs-unidade').addEventListener('change', carregarImportacoesDaUnidade);
@@ -882,10 +897,12 @@ function calcularResultadoSemana() {
     const baixaTotal = p.baixaColeta + p.baixaEntrega;
     const diasTotal = p.diasTotal.size;
     const servicosPorDia = diasTotal > 0 ? baixaTotal / diasTotal : 0;
-    // Total Pago só sai automático quando existe tarifa pro tipo (tipicamente
-    // FROTA); pra agregado/carreteiro e produção de transferência, o valor é
-    // digitado à mão na tela de revisão (ou depois, em "Resultados" > Editar).
-    const totalPago = tarifa ? (tarifa.diaria * diasTotal) + (tarifa.valorServico * baixaTotal) : null;
+    // Total Pago só sai automático pra FROTA (veículo próprio, pago pela
+    // tabela de diária/serviço). Agregado e carreteiro são pagos por valor
+    // negociado à parte, então o valor é SEMPRE digitado à mão na tela de
+    // revisão (ou depois, em "Resultados" > Editar) — mesmo que por acaso
+    // exista uma tarifa cadastrada pro mesmo "tipo" do veículo.
+    const totalPago = (relacionamento === 'FROTA' && tarifa) ? (tarifa.diaria * diasTotal) + (tarifa.valorServico * baixaTotal) : null;
     const producaoTransferencia = 0;
     const pagoPorTonelada = (totalPago !== null && pesoTotal > 0) ? totalPago / (pesoTotal / 1000) : null;
     const resultado = (totalPago !== null && freteTotal > 0) ? totalPago / freteTotal : null;
@@ -1007,7 +1024,7 @@ function montarTabelaResultados(c) {
     </tr>`;
 
   const linhaSubtotal = (nome, ac) => `
-    <tr class="rv-subtotal">
+    <tr class="rv-subtotal ${classeLinhaPorRelacionamento(nome)}">
       <td colspan="3">Subtotal ${escapeHtml(nome)} (${ac.qtdPlacas} placas)</td>
       <td>${fmtMoeda(ac.freteColeta)}</td><td>${fmtNum(ac.pesoColeta)}</td><td>${ac.baixaColeta}</td>
       <td>${fmtMoeda(ac.freteEntrega)}</td><td>${fmtNum(ac.pesoEntrega)}</td><td>${ac.baixaEntrega}</td>
@@ -1086,7 +1103,7 @@ function montarTabelaResultadosEditavel(c) {
   const linhaSubtotal = (nome, ac) => {
     const id = idSafe(nome);
     return `
-    <tr class="rv-subtotal">
+    <tr class="rv-subtotal ${classeLinhaPorRelacionamento(nome)}">
       <td colspan="3">Subtotal ${escapeHtml(nome)} (${ac.qtdPlacas} placas)</td>
       <td>${fmtMoeda(ac.freteColeta)}</td><td>${fmtNum(ac.pesoColeta)}</td><td>${ac.baixaColeta}</td>
       <td>${fmtMoeda(ac.freteEntrega)}</td><td>${fmtNum(ac.pesoEntrega)}</td><td>${ac.baixaEntrega}</td>
@@ -1366,6 +1383,89 @@ function pintarLinha(row, corFundoArgb, corTextoArgb) {
   });
 }
 
+// Monta o workbook (colorido, com subtotal/total) e dispara o download.
+// `dados` precisa ter resultadosPorPlaca/totaisPorRelacionamento/totalGeral
+// — serve tanto pra uma semana já salva (Resultados) quanto pra uma semana
+// ainda em revisão, antes de salvar (objetoEmEdicao).
+async function gerarEBaixarExcelResultado(dados, nomeArquivo) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Resultado');
+  ws.columns = COLUNAS_RESULTADO.map(c => ({ width: c.largura }));
+
+  const headerRow = ws.addRow(COLUNAS_RESULTADO.map(c => c.titulo));
+  headerRow.eachCell(cell => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COR_CABECALHO } };
+    cell.font = { bold: true, color: { argb: BRANCO } };
+    cell.alignment = { horizontal: 'center' };
+  });
+
+  const linhaPlaca = (r) => {
+    const row = ws.addRow(COLUNAS_RESULTADO.map(c => {
+      const v = r[c.chave];
+      return (v === null || v === undefined) ? '' : v;
+    }));
+    COLUNAS_RESULTADO.forEach((c, i) => {
+      const fmt = numFmtPorTipo(c.fmt);
+      if (fmt) row.getCell(i + 1).numFmt = fmt;
+    });
+    const rel = (r.relacionamento || '').toUpperCase();
+    if (rel === 'AGREGADO') pintarLinha(row, COR_AGREGADO, BRANCO);
+    else if (rel === 'FROTA') pintarLinha(row, COR_FROTA, BRANCO);
+  };
+
+  const linhaSubtotal = (nome, ac) => {
+    const dadosLinha = { ...ac, tipo: `Subtotal ${nome} (${ac.qtdPlacas} placas)`, placa: '', relacionamento: '' };
+    const row = ws.addRow(COLUNAS_RESULTADO.map(c => {
+      const v = dadosLinha[c.chave];
+      return (v === null || v === undefined) ? '' : v;
+    }));
+    ws.mergeCells(row.number, 1, row.number, 3);
+    COLUNAS_RESULTADO.forEach((c, i) => {
+      if (i < 3) return;
+      const fmt = numFmtPorTipo(c.fmt);
+      if (fmt) row.getCell(i + 1).numFmt = fmt;
+    });
+    row.font = { bold: true };
+    // Subtotal fica na MESMA cor do grupo (verde/azul), só em negrito —
+    // igual à tabela da tela. Carreteiro/outro fica no cinza padrão.
+    const nomeUpper = String(nome || '').toUpperCase();
+    if (nomeUpper === 'AGREGADO') pintarLinha(row, COR_AGREGADO, BRANCO);
+    else if (nomeUpper === 'FROTA') pintarLinha(row, COR_FROTA, BRANCO);
+    else pintarLinha(row, COR_SUBTOTAL, null);
+  };
+
+  Object.keys(dados.totaisPorRelacionamento).sort().forEach(grupo => {
+    dados.resultadosPorPlaca.filter(r => (r.relacionamento || 'OUTRO') === grupo).forEach(linhaPlaca);
+    linhaSubtotal(grupo, dados.totaisPorRelacionamento[grupo]);
+  });
+
+  const dadosTotal = { ...dados.totalGeral, tipo: `TOTAL GERAL (${dados.totalGeral.qtdPlacas} placas)`, placa: '', relacionamento: '' };
+  const rowTotal = ws.addRow(COLUNAS_RESULTADO.map(c => {
+    const v = dadosTotal[c.chave];
+    return (v === null || v === undefined) ? '' : v;
+  }));
+  ws.mergeCells(rowTotal.number, 1, rowTotal.number, 3);
+  COLUNAS_RESULTADO.forEach((c, i) => {
+    if (i < 3) return;
+    const fmt = numFmtPorTipo(c.fmt);
+    if (fmt) rowTotal.getCell(i + 1).numFmt = fmt;
+  });
+  pintarLinha(rowTotal, COR_TOTAL, BRANCO);
+
+  ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nomeArquivo;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 async function exportarResultadoExcel() {
   const id = document.getElementById('rs-importacao').value;
   const imp = importacoesCache.find(i => i.id === id);
@@ -1374,79 +1474,28 @@ async function exportarResultadoExcel() {
   const btn = document.getElementById('btn-exportar-resultado');
   const textoOriginal = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Gerando...'; }
-
   try {
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Resultado');
-    ws.columns = COLUNAS_RESULTADO.map(c => ({ width: c.largura }));
+    await gerarEBaixarExcelResultado(imp, `Resultado_${imp.unidade}_${imp.periodoInicio}_a_${imp.periodoFim}.xlsx`);
+  } catch (e) {
+    console.error(e);
+    alert('Erro ao gerar o Excel: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = textoOriginal; }
+  }
+}
 
-    const headerRow = ws.addRow(COLUNAS_RESULTADO.map(c => c.titulo));
-    headerRow.eachCell(cell => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COR_CABECALHO } };
-      cell.font = { bold: true, color: { argb: BRANCO } };
-      cell.alignment = { horizontal: 'center' };
-    });
+// Mesma exportação, mas pra semana ainda em revisão (antes de salvar) — usa
+// objetoEmEdicao, que já reflete qualquer "Total Pago"/"Produção Transf."
+// digitado à mão na tela, mesmo sem ter salvado ainda.
+async function exportarRevisaoExcel() {
+  if (!objetoEmEdicao) { alert('Calcule uma semana primeiro.'); return; }
 
-    const linhaPlaca = (r) => {
-      const row = ws.addRow(COLUNAS_RESULTADO.map(c => {
-        const v = r[c.chave];
-        return (v === null || v === undefined) ? '' : v;
-      }));
-      COLUNAS_RESULTADO.forEach((c, i) => {
-        const fmt = numFmtPorTipo(c.fmt);
-        if (fmt) row.getCell(i + 1).numFmt = fmt;
-      });
-      const rel = (r.relacionamento || '').toUpperCase();
-      if (rel === 'AGREGADO') pintarLinha(row, COR_AGREGADO, BRANCO);
-      else if (rel === 'FROTA') pintarLinha(row, COR_FROTA, BRANCO);
-    };
-
-    const linhaSubtotal = (nome, ac) => {
-      const dados = { ...ac, tipo: `Subtotal ${nome} (${ac.qtdPlacas} placas)`, placa: '', relacionamento: '' };
-      const row = ws.addRow(COLUNAS_RESULTADO.map(c => {
-        const v = dados[c.chave];
-        return (v === null || v === undefined) ? '' : v;
-      }));
-      ws.mergeCells(row.number, 1, row.number, 3);
-      COLUNAS_RESULTADO.forEach((c, i) => {
-        if (i < 3) return;
-        const fmt = numFmtPorTipo(c.fmt);
-        if (fmt) row.getCell(i + 1).numFmt = fmt;
-      });
-      row.font = { bold: true };
-      pintarLinha(row, COR_SUBTOTAL, null);
-    };
-
-    Object.keys(imp.totaisPorRelacionamento).sort().forEach(grupo => {
-      imp.resultadosPorPlaca.filter(r => (r.relacionamento || 'OUTRO') === grupo).forEach(linhaPlaca);
-      linhaSubtotal(grupo, imp.totaisPorRelacionamento[grupo]);
-    });
-
-    const dadosTotal = { ...imp.totalGeral, tipo: `TOTAL GERAL (${imp.totalGeral.qtdPlacas} placas)`, placa: '', relacionamento: '' };
-    const rowTotal = ws.addRow(COLUNAS_RESULTADO.map(c => {
-      const v = dadosTotal[c.chave];
-      return (v === null || v === undefined) ? '' : v;
-    }));
-    ws.mergeCells(rowTotal.number, 1, rowTotal.number, 3);
-    COLUNAS_RESULTADO.forEach((c, i) => {
-      if (i < 3) return;
-      const fmt = numFmtPorTipo(c.fmt);
-      if (fmt) rowTotal.getCell(i + 1).numFmt = fmt;
-    });
-    pintarLinha(rowTotal, COR_TOTAL, BRANCO);
-
-    ws.views = [{ state: 'frozen', ySplit: 1 }];
-
-    const buffer = await wb.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Resultado_${imp.unidade}_${imp.periodoInicio}_a_${imp.periodoFim}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const btn = document.getElementById('btn-exportar-revisao');
+  const textoOriginal = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Gerando...'; }
+  try {
+    const c = objetoEmEdicao;
+    await gerarEBaixarExcelResultado(c, `Resultado_${c.unidade}_${c.periodoInicio}_a_${c.periodoFim}.xlsx`);
   } catch (e) {
     console.error(e);
     alert('Erro ao gerar o Excel: ' + e.message);
