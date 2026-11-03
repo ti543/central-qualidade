@@ -1748,11 +1748,38 @@ function compararPlanilhaDePlacas(ev) {
       ${tabela('Placas que não aparecem mais na planilha (avalie se saíram da frota)', saidas, [
         ['Placa', r => r.placa], ['Tipo', r => r.tipo], ['Relacionamento', r => r.relacionamento]
       ])}
+      ${saidas.length && souQualidade() ? `
+        <div class="btn-group" style="margin-top:-10px;margin-bottom:14px;">
+          <button class="btn btn-danger" id="btn-remover-placas-saidas">Remover estas ${saidas.length} placa(s) do cadastro</button>
+        </div>
+      ` : ''}
       ${tabela('Placas que mudaram de tipo ou relacionamento', mudaram, [
         ['Placa', r => r.placa], ['Tipo antes', r => r.tipoAntes], ['Tipo agora', r => r.tipoDepois], ['Relac. antes', r => r.relacAntes], ['Relac. agora', r => r.relacDepois]
       ])}
     `;
+
+    const btnRemoverSaidas = document.getElementById('btn-remover-placas-saidas');
+    if (btnRemoverSaidas) btnRemoverSaidas.addEventListener('click', removerPlacasQueSairam);
   });
+}
+
+// Apaga do cadastro central as placas que a última comparação encontrou
+// como "não aparecem mais na planilha nova" (window._rvComparacao.saidas).
+// Usado pra limpar placas que saíram de operação de uma vez, sem precisar
+// clicar "Remover" uma por uma na aba Frota.
+async function removerPlacasQueSairam() {
+  const c = window._rvComparacao;
+  if (!c || !c.saidas.length) return;
+  if (!confirm(`Remover estas ${c.saidas.length} placa(s) do cadastro central? Essa ação não pode ser desfeita (o histórico de semanas já lançadas não é afetado).`)) return;
+
+  const lote = writeBatch(db);
+  c.saidas.forEach(f => lote.delete(doc(db, 'veiculos_frota', normPlaca(f.placa))));
+  await lote.commit();
+
+  await carregarFrota();
+  renderizarFrota();
+  document.getElementById('cp-resultado').innerHTML = `<div class="aviso-box">${c.saidas.length} placa(s) removida(s) do cadastro.</div>`;
+  window._rvComparacao = null;
 }
 
 function exportarComparacaoPlacas() {
