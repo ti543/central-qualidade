@@ -36,7 +36,7 @@
   .btn-group { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
 
   .table-wrapper { overflow-x: auto; max-width: 100%; border: 1px solid #ddd; border-radius: 6px; background: white; margin-top: 10px; }
-  table.rv-table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 1100px; }
+  table.rv-table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 1350px; }
   table.rv-table th { background: var(--qc-primary); padding: 10px 8px; text-align: right; font-weight: 600; color: white; white-space: nowrap; position: sticky; top: 0; }
   table.rv-table th:nth-child(1), table.rv-table th:nth-child(2), table.rv-table th:nth-child(3) { text-align: left; }
   table.rv-table td { padding: 8px 8px; border-bottom: 1px solid #eee; vertical-align: middle; white-space: nowrap; color: #444; text-align: right; }
@@ -55,6 +55,9 @@
 
   .aviso-box { background: #fff3cd; border: 1px solid #f0ad4e; color: #856404; padding: 12px 16px; border-radius: 6px; margin-top: 14px; font-size: 13.5px; }
   .aviso-box ul { margin: 6px 0 0 18px; }
+  .aviso-box.aviso-info { background: #e7f0fd; border-color: #8fb8ea; color: #1b4f8c; }
+
+  .rv-input { width: 92px; text-align: right; border: 0.5px solid #ccc; border-radius: 4px; padding: 6px; font-family: inherit; font-size: 12.5px; }
 
   .passo { display: none; }
   .passo.active { display: block; }
@@ -159,6 +162,7 @@
           <div class="form-group" style="justify-content:flex-end;">
             <div class="btn-group" style="margin-top:0;">
               <button class="btn" id="btn-exportar-resultado">Exportar Excel</button>
+              <button class="btn" id="btn-editar-valores" style="display:none;">Editar valores manuais</button>
               <button class="btn btn-danger" id="btn-excluir-importacao" style="display:none;">Excluir semana</button>
             </div>
           </div>
@@ -264,7 +268,7 @@
 <script type="module">
 import { auth, db } from '../firebase-config.js';
 import {
-  doc, setDoc, deleteDoc, addDoc, collection, getDocs, query, where, writeBatch, serverTimestamp
+  doc, setDoc, updateDoc, deleteDoc, addDoc, collection, getDocs, query, where, writeBatch, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { initLayout, escapeHtml } from '../assets/layout.js';
 
@@ -278,6 +282,8 @@ let importacoesCache = []; // metadados das semanas da unidade selecionada em "R
 let planilhaLida = null; // { linhas: [[...]], cabecalho: [...] }
 let mapaColunasEscolhido = null;
 let calculoAtual = null; // resultado do cálculo pronto para salvar
+let objetoEmEdicao = null; // aponta pra calculoAtual (semana nova) OU pra uma semana já salva sendo corrigida
+let modoEdicaoResultados = false; // true quando objetoEmEdicao é uma semana salva (Resultados > Editar valores)
 let editandoPlaca = null;
 let editandoTarifa = null;
 
@@ -288,6 +294,7 @@ function fmtNum(v, dec = 0) { return (Number(v) || 0).toLocaleString('pt-BR', { 
 function fmtPct(v) { return ((Number(v) || 0) * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'; }
 function normPlaca(p) { return String(p || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
 function normTipo(t) { return String(t || '').trim().toUpperCase(); }
+function idSafe(s) { return String(s || '').replace(/[^A-Za-z0-9_-]/g, '_'); }
 
 initLayout({
   auth, db,
@@ -300,6 +307,7 @@ initLayout({
 
   document.getElementById('aba-tarifas').style.display = souQualidade() ? 'inline-block' : 'none';
   document.getElementById('btn-excluir-importacao').style.display = souQualidade() ? 'inline-block' : 'none';
+  document.getElementById('btn-editar-valores').style.display = souQualidade() ? 'inline-block' : 'none';
   document.getElementById('card-form-placa').style.display = souQualidade() ? 'block' : 'none';
 
   povoarSelectsUnidade();
@@ -351,7 +359,14 @@ function ligarEventos() {
   document.getElementById('rs-unidade').addEventListener('change', carregarImportacoesDaUnidade);
   document.getElementById('rs-importacao').addEventListener('change', exibirImportacaoSelecionada);
   document.getElementById('btn-exportar-resultado').addEventListener('click', exportarResultadoExcel);
+  document.getElementById('btn-editar-valores').addEventListener('click', iniciarEdicaoValoresManuais);
   document.getElementById('btn-excluir-importacao').addEventListener('click', excluirImportacaoSelecionada);
+
+  // Delegação: funciona tanto na tabela de revisão (semana nova) quanto na
+  // tabela de edição de uma semana já salva — os dois usam a mesma classe.
+  document.addEventListener('change', (e) => {
+    if (e.target.matches('.rv-input-pago, .rv-input-transf')) recalcularLinhaEditavel(e.target.dataset.placa);
+  });
 
   document.getElementById('btn-salvar-placa').addEventListener('click', salvarPlaca);
   document.getElementById('btn-cancelar-edicao-placa').addEventListener('click', cancelarEdicaoPlaca);
@@ -503,22 +518,31 @@ function calcularResultadoSemana() {
     const tipo = cadastro ? normTipo(cadastro.tipo) : '';
     const relacionamento = cadastro ? (cadastro.relacionamento || 'OUTRO') : 'OUTRO';
     const tarifa = tarifaPorTipo[tipo] || null;
-    if (cadastro && !tarifa) tiposSemTarifa.add(cadastro.tipo);
+    // Só a FROTA (veículos próprios) é paga pela tabela de diária/serviço.
+    // Agregado e carreteiro são pagos por valor negociado à parte, então pra
+    // esses a falta de tarifa cadastrada é normal, não um erro de cadastro.
+    if (cadastro && !tarifa && relacionamento === 'FROTA') tiposSemTarifa.add(cadastro.tipo);
 
     const freteTotal = p.freteColeta + p.freteEntrega;
     const pesoTotal = p.pesoColeta + p.pesoEntrega;
     const baixaTotal = p.baixaColeta + p.baixaEntrega;
     const diasTotal = p.diasTotal.size;
     const servicosPorDia = diasTotal > 0 ? baixaTotal / diasTotal : 0;
+    // Total Pago só sai automático quando existe tarifa pro tipo (tipicamente
+    // FROTA); pra agregado/carreteiro e produção de transferência, o valor é
+    // digitado à mão na tela de revisão (ou depois, em "Resultados" > Editar).
     const totalPago = tarifa ? (tarifa.diaria * diasTotal) + (tarifa.valorServico * baixaTotal) : null;
+    const producaoTransferencia = 0;
     const pagoPorTonelada = (totalPago !== null && pesoTotal > 0) ? totalPago / (pesoTotal / 1000) : null;
     const resultado = (totalPago !== null && freteTotal > 0) ? totalPago / freteTotal : null;
+    const resultadoTotal = (totalPago !== null && (freteTotal + producaoTransferencia) > 0) ? totalPago / (freteTotal + producaoTransferencia) : null;
 
     return {
       placa: p.placaOriginal, tipo, relacionamento, cadastrada: !!cadastro,
       freteColeta: p.freteColeta, pesoColeta: p.pesoColeta, baixaColeta: p.baixaColeta, diasColeta: p.diasColeta.size,
       freteEntrega: p.freteEntrega, pesoEntrega: p.pesoEntrega, baixaEntrega: p.baixaEntrega, diasEntrega: p.diasEntrega.size,
-      freteTotal, pesoTotal, baixaTotal, diasTotal, servicosPorDia, totalPago, pagoPorTonelada, resultado
+      freteTotal, pesoTotal, baixaTotal, diasTotal, servicosPorDia,
+      totalPago, producaoTransferencia, pagoPorTonelada, resultado, resultadoTotal
     };
   }).sort((a, b) => a.placa.localeCompare(b.placa));
 
@@ -543,24 +567,27 @@ function calcularResultadoSemana() {
     placasDesconhecidas: Array.from(placasDesconhecidas),
     tiposSemTarifa: Array.from(tiposSemTarifa)
   };
+  objetoEmEdicao = calculoAtual;
+  modoEdicaoResultados = false;
 
   exibirRevisao();
   irParaPasso('revisar');
 }
 
 function criarAcumulador() {
-  return { freteColeta: 0, pesoColeta: 0, baixaColeta: 0, freteEntrega: 0, pesoEntrega: 0, baixaEntrega: 0, freteTotal: 0, pesoTotal: 0, baixaTotal: 0, diasTotal: 0, totalPago: 0, qtdPlacas: 0 };
+  return { freteColeta: 0, pesoColeta: 0, baixaColeta: 0, freteEntrega: 0, pesoEntrega: 0, baixaEntrega: 0, freteTotal: 0, pesoTotal: 0, baixaTotal: 0, diasTotal: 0, totalPago: 0, producaoTransferencia: 0, qtdPlacas: 0 };
 }
 function somarNoAcumulador(ac, r) {
   ac.freteColeta += r.freteColeta; ac.pesoColeta += r.pesoColeta; ac.baixaColeta += r.baixaColeta;
   ac.freteEntrega += r.freteEntrega; ac.pesoEntrega += r.pesoEntrega; ac.baixaEntrega += r.baixaEntrega;
   ac.freteTotal += r.freteTotal; ac.pesoTotal += r.pesoTotal; ac.baixaTotal += r.baixaTotal;
-  ac.diasTotal += r.diasTotal; ac.totalPago += (r.totalPago || 0); ac.qtdPlacas += 1;
+  ac.diasTotal += r.diasTotal; ac.totalPago += (r.totalPago || 0); ac.producaoTransferencia += (r.producaoTransferencia || 0); ac.qtdPlacas += 1;
 }
 function fecharAcumulador(ac) {
   ac.servicosPorDia = ac.diasTotal > 0 ? ac.baixaTotal / ac.diasTotal : 0;
   ac.pagoPorTonelada = ac.pesoTotal > 0 ? ac.totalPago / (ac.pesoTotal / 1000) : 0;
   ac.resultado = ac.freteTotal > 0 ? ac.totalPago / ac.freteTotal : 0;
+  ac.resultadoTotal = (ac.freteTotal + ac.producaoTransferencia) > 0 ? ac.totalPago / (ac.freteTotal + ac.producaoTransferencia) : 0;
 }
 
 function exibirRevisao() {
@@ -573,17 +600,25 @@ function exibirRevisao() {
 
   const avisos = [];
   if (c.placasDesconhecidas.length) {
-    avisos.push(`<strong>${c.placasDesconhecidas.length} placa(s) não cadastrada(s) na Frota</strong> (entraram no total, mas sem tipo/relacionamento/pagamento até você cadastrar): ${c.placasDesconhecidas.map(escapeHtml).join(', ')}`);
+    avisos.push(`<strong>${c.placasDesconhecidas.length} placa(s) não cadastrada(s) na Frota</strong> (entraram no total, mas sem tipo/relacionamento até você cadastrar): ${c.placasDesconhecidas.map(escapeHtml).join(', ')}`);
   }
   if (c.tiposSemTarifa.length) {
-    avisos.push(`<strong>Tipo(s) sem tarifa cadastrada</strong> (pagamento não calculado até cadastrar em "Tarifas"): ${c.tiposSemTarifa.map(escapeHtml).join(', ')}`);
+    avisos.push(`<strong>Tipo(s) da FROTA sem tarifa cadastrada</strong> (pagamento não calculado até cadastrar em "Tarifas"): ${c.tiposSemTarifa.map(escapeHtml).join(', ')}`);
   }
-  document.getElementById('revisar-avisos').innerHTML = avisos.length
-    ? `<div class="aviso-box"><ul>${avisos.map(a => `<li>${a}</li>`).join('')}</ul></div>` : '';
+  document.getElementById('revisar-avisos').innerHTML = `
+    <div class="aviso-box aviso-info">
+      "Total Pago" e "Produção Transf." vêm em branco/0 pra placas de agregado e carreteiro (e você pode
+      corrigir qualquer placa) — digite o valor combinado na própria tabela abaixo antes de salvar.
+    </div>
+    ${avisos.length ? `<div class="aviso-box"><ul>${avisos.map(a => `<li>${a}</li>`).join('')}</ul></div>` : ''}
+  `;
 
-  document.getElementById('revisar-tabela').innerHTML = montarTabelaResultados(c);
+  document.getElementById('revisar-tabela').innerHTML = montarTabelaResultadosEditavel(c);
 }
 
+// Tabela só-leitura (usada na aba "Resultados" pra exibir uma semana já
+// salva). Docs salvos antes da produção de transferência existir no sistema
+// simplesmente não têm o campo — por isso os "|| 0"/checagens abaixo.
 function montarTabelaResultados(c) {
   const linhaPlaca = (r) => `
     <tr class="${!r.cadastrada ? 'rv-sem-placa' : ''}">
@@ -594,9 +629,11 @@ function montarTabelaResultados(c) {
       <td>${fmtMoeda(r.freteEntrega)}</td><td>${fmtNum(r.pesoEntrega)}</td><td>${r.baixaEntrega}</td>
       <td>${fmtMoeda(r.freteTotal)}</td><td>${fmtNum(r.pesoTotal)}</td><td>${r.baixaTotal}</td>
       <td>${r.diasTotal}</td><td>${fmtNum(r.servicosPorDia, 1)}</td>
-      <td>${r.totalPago !== null ? fmtMoeda(r.totalPago) : '—'}</td>
-      <td>${r.pagoPorTonelada !== null ? fmtMoeda(r.pagoPorTonelada) : '—'}</td>
-      <td>${r.resultado !== null ? fmtPct(r.resultado) : '—'}</td>
+      <td>${r.totalPago !== null && r.totalPago !== undefined ? fmtMoeda(r.totalPago) : '—'}</td>
+      <td>${fmtMoeda(r.producaoTransferencia || 0)}</td>
+      <td>${r.pagoPorTonelada !== null && r.pagoPorTonelada !== undefined ? fmtMoeda(r.pagoPorTonelada) : '—'}</td>
+      <td>${r.resultado !== null && r.resultado !== undefined ? fmtPct(r.resultado) : '—'}</td>
+      <td>${r.resultadoTotal !== null && r.resultadoTotal !== undefined ? fmtPct(r.resultadoTotal) : '—'}</td>
     </tr>`;
 
   const linhaSubtotal = (nome, ac) => `
@@ -606,7 +643,8 @@ function montarTabelaResultados(c) {
       <td>${fmtMoeda(ac.freteEntrega)}</td><td>${fmtNum(ac.pesoEntrega)}</td><td>${ac.baixaEntrega}</td>
       <td>${fmtMoeda(ac.freteTotal)}</td><td>${fmtNum(ac.pesoTotal)}</td><td>${ac.baixaTotal}</td>
       <td>${ac.diasTotal}</td><td>${fmtNum(ac.servicosPorDia, 1)}</td>
-      <td>${fmtMoeda(ac.totalPago)}</td><td>${fmtMoeda(ac.pagoPorTonelada)}</td><td>${fmtPct(ac.resultado)}</td>
+      <td>${fmtMoeda(ac.totalPago)}</td><td>${fmtMoeda(ac.producaoTransferencia || 0)}</td>
+      <td>${fmtMoeda(ac.pagoPorTonelada)}</td><td>${fmtPct(ac.resultado)}</td><td>${fmtPct(ac.resultadoTotal || 0)}</td>
     </tr>`;
 
   let corpo = '';
@@ -624,7 +662,7 @@ function montarTabelaResultados(c) {
           <th>Frete Entrega</th><th>Peso Entrega</th><th>Baixa Entrega</th>
           <th>Frete Total</th><th>Peso Total</th><th>Baixa Total</th>
           <th>Dias Trab.</th><th>Serv./dia</th>
-          <th>Total Pago</th><th>Pago/ton.</th><th>Resultado</th>
+          <th>Total Pago</th><th>Produção Transf.</th><th>Pago/ton.</th><th>Resultado</th><th>Resultado Total</th>
         </tr></thead>
         <tbody>
           ${corpo}
@@ -634,12 +672,143 @@ function montarTabelaResultados(c) {
             <td>${fmtMoeda(c.totalGeral.freteEntrega)}</td><td>${fmtNum(c.totalGeral.pesoEntrega)}</td><td>${c.totalGeral.baixaEntrega}</td>
             <td>${fmtMoeda(c.totalGeral.freteTotal)}</td><td>${fmtNum(c.totalGeral.pesoTotal)}</td><td>${c.totalGeral.baixaTotal}</td>
             <td>${c.totalGeral.diasTotal}</td><td>${fmtNum(c.totalGeral.servicosPorDia, 1)}</td>
-            <td>${fmtMoeda(c.totalGeral.totalPago)}</td><td>${fmtMoeda(c.totalGeral.pagoPorTonelada)}</td><td>${fmtPct(c.totalGeral.resultado)}</td>
+            <td>${fmtMoeda(c.totalGeral.totalPago)}</td><td>${fmtMoeda(c.totalGeral.producaoTransferencia || 0)}</td>
+            <td>${fmtMoeda(c.totalGeral.pagoPorTonelada)}</td><td>${fmtPct(c.totalGeral.resultado)}</td><td>${fmtPct(c.totalGeral.resultadoTotal || 0)}</td>
           </tr>
         </tbody>
       </table>
     </div>
   `;
+}
+
+// Mesma tabela, mas com "Total Pago" e "Produção Transf." como campos
+// digitáveis — usada tanto na revisão de uma semana nova quanto na edição de
+// uma semana já salva (ver iniciarEdicaoValoresManuais). Os dois casos
+// operam sobre `objetoEmEdicao`, que recalcularLinhaEditavel() usa pra
+// atualizar os totais em tempo real conforme o usuário digita.
+function montarTabelaResultadosEditavel(c) {
+  const linhaPlaca = (r) => {
+    const chave = normPlaca(r.placa);
+    return `
+    <tr class="${!r.cadastrada ? 'rv-sem-placa' : ''}">
+      <td>${escapeHtml(r.tipo || '(sem cadastro)')}</td>
+      <td>${escapeHtml(r.placa)}</td>
+      <td>${escapeHtml(r.relacionamento)}</td>
+      <td>${fmtMoeda(r.freteColeta)}</td><td>${fmtNum(r.pesoColeta)}</td><td>${r.baixaColeta}</td>
+      <td>${fmtMoeda(r.freteEntrega)}</td><td>${fmtNum(r.pesoEntrega)}</td><td>${r.baixaEntrega}</td>
+      <td>${fmtMoeda(r.freteTotal)}</td><td>${fmtNum(r.pesoTotal)}</td><td>${r.baixaTotal}</td>
+      <td>${r.diasTotal}</td><td>${fmtNum(r.servicosPorDia, 1)}</td>
+      <td><input type="number" step="0.01" class="rv-input rv-input-pago" data-placa="${chave}" value="${(r.totalPago !== null && r.totalPago !== undefined) ? r.totalPago : ''}" placeholder="digitar..."></td>
+      <td><input type="number" step="0.01" class="rv-input rv-input-transf" data-placa="${chave}" value="${r.producaoTransferencia || 0}"></td>
+      <td id="rv-td-pagoton-${chave}">${(r.pagoPorTonelada !== null && r.pagoPorTonelada !== undefined) ? fmtMoeda(r.pagoPorTonelada) : '—'}</td>
+      <td id="rv-td-resultado-${chave}">${(r.resultado !== null && r.resultado !== undefined) ? fmtPct(r.resultado) : '—'}</td>
+      <td id="rv-td-resultadototal-${chave}">${(r.resultadoTotal !== null && r.resultadoTotal !== undefined) ? fmtPct(r.resultadoTotal) : '—'}</td>
+    </tr>`;
+  };
+
+  const linhaSubtotal = (nome, ac) => {
+    const id = idSafe(nome);
+    return `
+    <tr class="rv-subtotal">
+      <td colspan="3">Subtotal ${escapeHtml(nome)} (${ac.qtdPlacas} placas)</td>
+      <td>${fmtMoeda(ac.freteColeta)}</td><td>${fmtNum(ac.pesoColeta)}</td><td>${ac.baixaColeta}</td>
+      <td>${fmtMoeda(ac.freteEntrega)}</td><td>${fmtNum(ac.pesoEntrega)}</td><td>${ac.baixaEntrega}</td>
+      <td>${fmtMoeda(ac.freteTotal)}</td><td>${fmtNum(ac.pesoTotal)}</td><td>${ac.baixaTotal}</td>
+      <td>${ac.diasTotal}</td><td>${fmtNum(ac.servicosPorDia, 1)}</td>
+      <td id="rv-sub-pago-${id}">${fmtMoeda(ac.totalPago)}</td>
+      <td id="rv-sub-transf-${id}">${fmtMoeda(ac.producaoTransferencia)}</td>
+      <td id="rv-sub-pagoton-${id}">${fmtMoeda(ac.pagoPorTonelada)}</td>
+      <td id="rv-sub-resultado-${id}">${fmtPct(ac.resultado)}</td>
+      <td id="rv-sub-resultadototal-${id}">${fmtPct(ac.resultadoTotal)}</td>
+    </tr>`;
+  };
+
+  let corpo = '';
+  Object.keys(c.totaisPorRelacionamento).sort().forEach(grupo => {
+    corpo += c.resultadosPorPlaca.filter(r => (r.relacionamento || 'OUTRO') === grupo).map(linhaPlaca).join('');
+    corpo += linhaSubtotal(grupo, c.totaisPorRelacionamento[grupo]);
+  });
+
+  return `
+    <div class="table-wrapper">
+      <table class="rv-table">
+        <thead><tr>
+          <th>Tipo</th><th>Placa</th><th>Relac.</th>
+          <th>Frete Coleta</th><th>Peso Coleta</th><th>Baixa Coleta</th>
+          <th>Frete Entrega</th><th>Peso Entrega</th><th>Baixa Entrega</th>
+          <th>Frete Total</th><th>Peso Total</th><th>Baixa Total</th>
+          <th>Dias Trab.</th><th>Serv./dia</th>
+          <th>Total Pago</th><th>Produção Transf.</th><th>Pago/ton.</th><th>Resultado</th><th>Resultado Total</th>
+        </tr></thead>
+        <tbody>
+          ${corpo}
+          <tr class="rv-total">
+            <td colspan="3">TOTAL GERAL (${c.totalGeral.qtdPlacas} placas)</td>
+            <td>${fmtMoeda(c.totalGeral.freteColeta)}</td><td>${fmtNum(c.totalGeral.pesoColeta)}</td><td>${c.totalGeral.baixaColeta}</td>
+            <td>${fmtMoeda(c.totalGeral.freteEntrega)}</td><td>${fmtNum(c.totalGeral.pesoEntrega)}</td><td>${c.totalGeral.baixaEntrega}</td>
+            <td>${fmtMoeda(c.totalGeral.freteTotal)}</td><td>${fmtNum(c.totalGeral.pesoTotal)}</td><td>${c.totalGeral.baixaTotal}</td>
+            <td>${c.totalGeral.diasTotal}</td><td>${fmtNum(c.totalGeral.servicosPorDia, 1)}</td>
+            <td id="rv-total-pago">${fmtMoeda(c.totalGeral.totalPago)}</td>
+            <td id="rv-total-transf">${fmtMoeda(c.totalGeral.producaoTransferencia)}</td>
+            <td id="rv-total-pagoton">${fmtMoeda(c.totalGeral.pagoPorTonelada)}</td>
+            <td id="rv-total-resultado">${fmtPct(c.totalGeral.resultado)}</td>
+            <td id="rv-total-resultadototal">${fmtPct(c.totalGeral.resultadoTotal)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// Chamado a cada alteração de um campo "Total Pago"/"Produção Transf." —
+// atualiza a linha da placa e refaz os subtotais/total geral, sem recriar a
+// tabela inteira (recriar perderia o foco do campo que o usuário está
+// digitando).
+function recalcularLinhaEditavel(chavePlaca) {
+  if (!objetoEmEdicao || !chavePlaca) return;
+  const r = objetoEmEdicao.resultadosPorPlaca.find(x => normPlaca(x.placa) === chavePlaca);
+  if (!r) return;
+
+  const inputPago = document.querySelector(`.rv-input-pago[data-placa="${chavePlaca}"]`);
+  const inputTransf = document.querySelector(`.rv-input-transf[data-placa="${chavePlaca}"]`);
+  r.totalPago = (inputPago && inputPago.value !== '') ? (parseFloat(inputPago.value) || 0) : null;
+  r.producaoTransferencia = inputTransf ? (parseFloat(inputTransf.value) || 0) : 0;
+  r.pagoPorTonelada = (r.totalPago !== null && r.pesoTotal > 0) ? r.totalPago / (r.pesoTotal / 1000) : null;
+  r.resultado = (r.totalPago !== null && r.freteTotal > 0) ? r.totalPago / r.freteTotal : null;
+  r.resultadoTotal = (r.totalPago !== null && (r.freteTotal + r.producaoTransferencia) > 0) ? r.totalPago / (r.freteTotal + r.producaoTransferencia) : null;
+
+  const setTxt = (id, html) => { const el = document.getElementById(id); if (el) el.textContent = html; };
+  setTxt(`rv-td-pagoton-${chavePlaca}`, r.pagoPorTonelada !== null ? fmtMoeda(r.pagoPorTonelada) : '—');
+  setTxt(`rv-td-resultado-${chavePlaca}`, r.resultado !== null ? fmtPct(r.resultado) : '—');
+  setTxt(`rv-td-resultadototal-${chavePlaca}`, r.resultadoTotal !== null ? fmtPct(r.resultadoTotal) : '—');
+
+  const grupos = {};
+  objetoEmEdicao.resultadosPorPlaca.forEach(row => {
+    const g = row.relacionamento || 'OUTRO';
+    if (!grupos[g]) grupos[g] = criarAcumulador();
+    somarNoAcumulador(grupos[g], row);
+  });
+  const totalGeral = criarAcumulador();
+  objetoEmEdicao.resultadosPorPlaca.forEach(row => somarNoAcumulador(totalGeral, row));
+  Object.values(grupos).forEach(fecharAcumulador);
+  fecharAcumulador(totalGeral);
+  objetoEmEdicao.totaisPorRelacionamento = grupos;
+  objetoEmEdicao.totalGeral = totalGeral;
+
+  Object.keys(grupos).forEach(nome => {
+    const id = idSafe(nome);
+    const ac = grupos[nome];
+    setTxt(`rv-sub-pago-${id}`, fmtMoeda(ac.totalPago));
+    setTxt(`rv-sub-transf-${id}`, fmtMoeda(ac.producaoTransferencia));
+    setTxt(`rv-sub-pagoton-${id}`, fmtMoeda(ac.pagoPorTonelada));
+    setTxt(`rv-sub-resultado-${id}`, fmtPct(ac.resultado));
+    setTxt(`rv-sub-resultadototal-${id}`, fmtPct(ac.resultadoTotal));
+  });
+  setTxt('rv-total-pago', fmtMoeda(totalGeral.totalPago));
+  setTxt('rv-total-transf', fmtMoeda(totalGeral.producaoTransferencia));
+  setTxt('rv-total-pagoton', fmtMoeda(totalGeral.pagoPorTonelada));
+  setTxt('rv-total-resultado', fmtPct(totalGeral.resultado));
+  setTxt('rv-total-resultadototal', fmtPct(totalGeral.resultadoTotal));
 }
 
 async function salvarImportacao() {
@@ -661,6 +830,7 @@ async function salvarImportacao() {
     });
     alert('Semana salva com sucesso!');
     calculoAtual = null;
+    objetoEmEdicao = null;
     document.getElementById('lc-arquivo').value = '';
     document.getElementById('lc-aba').innerHTML = '<option>Escolha o arquivo primeiro...</option>';
     document.getElementById('lc-aba').disabled = true;
@@ -697,6 +867,7 @@ async function carregarImportacoesDaUnidade() {
 }
 
 function exibirImportacaoSelecionada() {
+  modoEdicaoResultados = false;
   const id = document.getElementById('rs-importacao').value;
   const imp = importacoesCache.find(i => i.id === id);
   if (!imp) { document.getElementById('rs-conteudo').innerHTML = ''; return; }
@@ -707,6 +878,59 @@ function exibirImportacaoSelecionada() {
     </div>
     ${montarTabelaResultados(imp)}
   `;
+}
+
+// Reabre a semana selecionada com "Total Pago"/"Produção Transf." digitáveis
+// — pra corrigir o valor combinado com agregado/carreteiro depois que a
+// semana já foi salva (só qualidade, igual excluir).
+function iniciarEdicaoValoresManuais() {
+  const id = document.getElementById('rs-importacao').value;
+  const imp = importacoesCache.find(i => i.id === id);
+  if (!imp) { alert('Selecione uma semana primeiro.'); return; }
+
+  objetoEmEdicao = imp;
+  modoEdicaoResultados = true;
+
+  document.getElementById('rs-conteudo').innerHTML = `
+    <div class="aviso-box aviso-info">
+      Editando "Total Pago" e "Produção Transf." da semana ${imp.periodoInicio.split('-').reverse().join('/')} a ${imp.periodoFim.split('-').reverse().join('/')}.
+      As colunas de frete/peso/baixa não mudam aqui — elas vêm da planilha original importada.
+    </div>
+    ${montarTabelaResultadosEditavel(imp)}
+    <div class="btn-group">
+      <button class="btn" id="btn-cancelar-edicao-valores">Cancelar</button>
+      <button class="btn btn-primary" id="btn-salvar-edicao-valores">Salvar alterações</button>
+    </div>
+  `;
+
+  document.getElementById('btn-cancelar-edicao-valores').addEventListener('click', () => {
+    modoEdicaoResultados = false;
+    exibirImportacaoSelecionada();
+  });
+  document.getElementById('btn-salvar-edicao-valores').addEventListener('click', salvarEdicaoValoresManuais);
+}
+
+async function salvarEdicaoValoresManuais() {
+  if (!modoEdicaoResultados || !objetoEmEdicao || !objetoEmEdicao.id) return;
+  const btn = document.getElementById('btn-salvar-edicao-valores');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  try {
+    await updateDoc(doc(db, 'rv_importacoes', objetoEmEdicao.id), {
+      resultadosPorPlaca: objetoEmEdicao.resultadosPorPlaca,
+      totaisPorRelacionamento: objetoEmEdicao.totaisPorRelacionamento,
+      totalGeral: objetoEmEdicao.totalGeral
+    });
+    alert('Valores atualizados com sucesso!');
+    const idSalvo = objetoEmEdicao.id;
+    modoEdicaoResultados = false;
+    await carregarImportacoesDaUnidade();
+    document.getElementById('rs-importacao').value = idSalvo;
+    exibirImportacaoSelecionada();
+  } catch (err) {
+    alert('Erro ao salvar: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Salvar alterações';
+  }
 }
 
 function exportarResultadoExcel() {
@@ -720,7 +944,8 @@ function exportarResultadoExcel() {
     'Frete Entrega': r.freteEntrega, 'Peso Entrega': r.pesoEntrega, 'Baixa Entrega': r.baixaEntrega,
     'Frete Total': r.freteTotal, 'Peso Total': r.pesoTotal, 'Baixa Total': r.baixaTotal,
     'Dias Trabalhados': r.diasTotal, 'Serviços/dia': r.servicosPorDia,
-    'Total Pago': r.totalPago, 'Pago/Tonelada': r.pagoPorTonelada, 'Resultado': r.resultado
+    'Total Pago': r.totalPago, 'Produção Transferência': r.producaoTransferencia || 0,
+    'Pago/Tonelada': r.pagoPorTonelada, 'Resultado': r.resultado, 'Resultado Total': r.resultadoTotal
   }));
   const planilha = XLSX.utils.json_to_sheet(linhas);
   const livro = XLSX.utils.book_new();
