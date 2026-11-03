@@ -1428,6 +1428,16 @@ async function removerPlaca(id) {
 // coluna, cabeçalho detectado por nome) e devolve um Map chave->{placa,tipo,
 // relacionamento}. Usado tanto pra importar de vez quanto pra só comparar
 // sem gravar nada.
+// Interpreta uma célula de "Ativo/Situação" como true/false. undefined
+// quando a própria coluna não existe na planilha (aí quem chama decide o
+// padrão, normalmente manter true pra não desativar nada à toa).
+function interpretarAtivo(valor) {
+  const v = String(valor || '').trim().toUpperCase();
+  if (!v) return true;
+  if (['INATIVO', 'NAO', 'NÃO', 'N', '0', 'FALSE', 'FALSO'].includes(v)) return false;
+  return true;
+}
+
 function extrairPlacasDeLivro(livro) {
   const aba = livro.Sheets[livro.SheetNames[0]];
   const linhas = XLSX.utils.sheet_to_json(aba, { header: 1, defval: '', raw: false });
@@ -1440,6 +1450,10 @@ function extrairPlacasDeLivro(livro) {
   const iPlaca = cabecalho.findIndex(c => c.includes('placa'));
   const iTipo = cabecalho.findIndex(c => c.includes('tipo'));
   const iRelac = cabecalho.findIndex(c => c.includes('relac'));
+  // Coluna opcional de "Ativo"/"Situação" - quando presente, deixa importar
+  // em lote qual placa entra ou não no relatório (igual a coluna "PLACAS"
+  // da planilha original), sem precisar editar uma por uma na tela.
+  const iAtivo = cabecalho.findIndex(c => c.includes('ativo') || c.includes('situa'));
   if (iPlaca < 0) return { mapa: new Map(), erro: 'Não encontrei uma coluna de PLACA nessa planilha.' };
 
   const mapa = new Map();
@@ -1449,7 +1463,8 @@ function extrairPlacasDeLivro(livro) {
     mapa.set(placaChave, {
       placa: String(linha[iPlaca]).trim().toUpperCase(),
       tipo: iTipo >= 0 ? String(linha[iTipo] || '').trim() : '',
-      relacionamento: iRelac >= 0 ? (normTipo(linha[iRelac]) || 'OUTRO') : 'OUTRO'
+      relacionamento: iRelac >= 0 ? (normTipo(linha[iRelac]) || 'OUTRO') : 'OUTRO',
+      ativo: iAtivo >= 0 ? interpretarAtivo(linha[iAtivo]) : undefined
     });
   });
   return { mapa, erro: null };
@@ -1490,7 +1505,8 @@ function extrairPlacasDeTextoSSW(texto) {
     mapa.set(placaChave, {
       placa: String(placaBruta || '').trim().toUpperCase(),
       tipo: String(campos[indice.TIPO] || '').trim(),
-      relacionamento: normTipo(campos[indice.RELACIONAMENTO]) || 'OUTRO'
+      relacionamento: normTipo(campos[indice.RELACIONAMENTO]) || 'OUTRO',
+      ativo: ('ATIVO' in indice || 'SITUACAO' in indice) ? interpretarAtivo(campos[indice.ATIVO ?? indice.SITUACAO]) : undefined
     });
   });
 
@@ -1530,7 +1546,9 @@ function importarListaDePlacas(ev) {
       const lote = writeBatch(db);
       itens.slice(i, i + 450).forEach(dados => {
         lote.set(doc(db, 'veiculos_frota', normPlaca(dados.placa)), {
-          placa: dados.placa, tipo: dados.tipo, relacionamento: dados.relacionamento, ativo: true, atualizadoEm: serverTimestamp()
+          placa: dados.placa, tipo: dados.tipo, relacionamento: dados.relacionamento,
+          ativo: dados.ativo !== undefined ? dados.ativo : true,
+          atualizadoEm: serverTimestamp()
         }, { merge: true });
         total++;
       });
