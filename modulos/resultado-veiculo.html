@@ -45,19 +45,27 @@
   .table-wrapper::-webkit-scrollbar-thumb:hover { background: #888; }
   table.rv-table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 1350px; }
   table.rv-table th { background: var(--qc-primary); padding: 10px 8px; text-align: right; font-weight: 600; color: white; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
-  table.rv-table th:nth-child(1), table.rv-table th:nth-child(2), table.rv-table th:nth-child(3) { text-align: left; }
   table.rv-table td { padding: 8px 8px; border-bottom: 1px solid #eee; vertical-align: middle; white-space: nowrap; color: #444; text-align: right; }
-  table.rv-table td:nth-child(1), table.rv-table td:nth-child(2), table.rv-table td:nth-child(3) { text-align: left; }
   table.rv-table tbody tr { background: #fff; }
   table.rv-table tr:hover { background: #f1f5f9; }
   table.rv-table tr.rv-subtotal { background: #eef0fa; font-weight: 700; }
 
-  /* Tipo e Placa ficam fixas ao rolar a tabela pro lado, igual "congelar
-     painéis" do Excel — sempre dá pra saber de qual placa é cada valor. */
-  table.rv-table th:nth-child(1), table.rv-table td:nth-child(1) { position: sticky; left: 0; width: 76px; min-width: 76px; max-width: 76px; overflow: hidden; text-overflow: ellipsis; }
-  table.rv-table th:nth-child(2), table.rv-table td:nth-child(2) { position: sticky; left: 76px; width: 96px; min-width: 96px; max-width: 96px; overflow: hidden; text-overflow: ellipsis; border-right: 2px solid #ccc; }
-  table.rv-table th:nth-child(1), table.rv-table th:nth-child(2) { z-index: 3; }
-  table.rv-table td:nth-child(1), table.rv-table td:nth-child(2) { z-index: 1; background: inherit; }
+  /* Tipo, Placa e Relac. usam classe (não nth-child) porque nas linhas de
+     Subtotal/TOTAL as 3 primeiras colunas viram uma célula só (colspan=3) —
+     nth-child ali contaria errado e bagunçava a coluna seguinte. */
+  table.rv-table th.rv-col-tipo, table.rv-table th.rv-col-placa, table.rv-table th.rv-col-relac,
+  table.rv-table td.rv-col-tipo, table.rv-table td.rv-col-placa, table.rv-table td.rv-col-relac,
+  table.rv-table td.rv-col-label-fixa { text-align: left; }
+
+  /* Tipo e Placa ficam fixos ao rolar a tabela pro lado, igual "congelar
+     painéis" do Excel — sempre dá pra saber de qual placa é cada valor.
+     Tipo NÃO tem largura máxima nem corte — o nome do veículo nunca pode
+     ficar escondido; 170px é só um mínimo confortável pro caso comum. */
+  table.rv-table th.rv-col-tipo, table.rv-table td.rv-col-tipo { position: sticky; left: 0; width: 170px; min-width: 170px; }
+  table.rv-table th.rv-col-placa, table.rv-table td.rv-col-placa { position: sticky; left: 170px; width: 96px; min-width: 96px; max-width: 96px; overflow: hidden; text-overflow: ellipsis; border-right: 2px solid #ccc; }
+  table.rv-table td.rv-col-label-fixa { position: sticky; left: 0; border-right: 2px solid #ccc; }
+  table.rv-table th.rv-col-tipo, table.rv-table th.rv-col-placa { z-index: 3; }
+  table.rv-table td.rv-col-tipo, table.rv-table td.rv-col-placa, table.rv-table td.rv-col-label-fixa { z-index: 1; background: inherit; }
   table.rv-table tr.rv-total { background: #000; color: #fff; font-weight: 700; }
   table.rv-table tr.rv-total td { color: #fff; }
   table.rv-table tr.rv-sem-placa td:nth-child(2) { color: #c65911; font-weight: 700; }
@@ -1008,9 +1016,9 @@ function exibirRevisao() {
 function montarTabelaResultados(c) {
   const linhaPlaca = (r) => `
     <tr class="${classeLinhaPorRelacionamento(r.relacionamento)} ${!r.cadastrada ? 'rv-sem-placa' : ''}">
-      <td>${escapeHtml(r.tipo || '(sem cadastro)')}</td>
-      <td>${escapeHtml(r.placa)}</td>
-      <td>${escapeHtml(r.relacionamento)}</td>
+      <td class="rv-col-tipo">${escapeHtml(r.tipo || '(sem cadastro)')}</td>
+      <td class="rv-col-placa">${escapeHtml(r.placa)}</td>
+      <td class="rv-col-relac">${escapeHtml(r.relacionamento)}</td>
       <td>${fmtMoeda(r.freteColeta)}</td><td>${fmtNum(r.pesoColeta)}</td><td>${r.baixaColeta}</td>
       <td>${fmtMoeda(r.freteEntrega)}</td><td>${fmtNum(r.pesoEntrega)}</td><td>${r.baixaEntrega}</td>
       <td>${fmtMoeda(r.freteTotal)}</td><td>${fmtNum(r.pesoTotal)}</td><td>${r.baixaTotal}</td>
@@ -1025,7 +1033,7 @@ function montarTabelaResultados(c) {
 
   const linhaSubtotal = (nome, ac) => `
     <tr class="rv-subtotal ${classeLinhaPorRelacionamento(nome)}">
-      <td colspan="3">Subtotal ${escapeHtml(nome)} (${ac.qtdPlacas} placas)</td>
+      <td class="rv-col-label-fixa" colspan="3">Subtotal ${escapeHtml(nome)} (${ac.qtdPlacas} placas)</td>
       <td>${fmtMoeda(ac.freteColeta)}</td><td>${fmtNum(ac.pesoColeta)}</td><td>${ac.baixaColeta}</td>
       <td>${fmtMoeda(ac.freteEntrega)}</td><td>${fmtNum(ac.pesoEntrega)}</td><td>${ac.baixaEntrega}</td>
       <td>${fmtMoeda(ac.freteTotal)}</td><td>${fmtNum(ac.pesoTotal)}</td><td>${ac.baixaTotal}</td>
@@ -1049,7 +1057,7 @@ function montarTabelaResultados(c) {
     <div class="table-wrapper">
       <table class="rv-table">
         <thead><tr>
-          <th>Tipo</th><th>Placa</th><th>Relac.</th>
+          <th class="rv-col-tipo">Tipo</th><th class="rv-col-placa">Placa</th><th class="rv-col-relac">Relac.</th>
           <th>Frete Coleta</th><th>Peso Coleta</th><th>Baixa Coleta</th>
           <th>Frete Entrega</th><th>Peso Entrega</th><th>Baixa Entrega</th>
           <th>Frete Total</th><th>Peso Total</th><th>Baixa Total</th>
@@ -1059,7 +1067,7 @@ function montarTabelaResultados(c) {
         <tbody>
           ${corpo}
           <tr class="rv-total">
-            <td colspan="3">TOTAL GERAL (${c.totalGeral.qtdPlacas} placas)</td>
+            <td class="rv-col-label-fixa" colspan="3">TOTAL GERAL (${c.totalGeral.qtdPlacas} placas)</td>
             <td>${fmtMoeda(c.totalGeral.freteColeta)}</td><td>${fmtNum(c.totalGeral.pesoColeta)}</td><td>${c.totalGeral.baixaColeta}</td>
             <td>${fmtMoeda(c.totalGeral.freteEntrega)}</td><td>${fmtNum(c.totalGeral.pesoEntrega)}</td><td>${c.totalGeral.baixaEntrega}</td>
             <td>${fmtMoeda(c.totalGeral.freteTotal)}</td><td>${fmtNum(c.totalGeral.pesoTotal)}</td><td>${c.totalGeral.baixaTotal}</td>
@@ -1084,9 +1092,9 @@ function montarTabelaResultadosEditavel(c) {
     const chave = normPlaca(r.placa);
     return `
     <tr class="${classeLinhaPorRelacionamento(r.relacionamento)} ${!r.cadastrada ? 'rv-sem-placa' : ''}">
-      <td>${escapeHtml(r.tipo || '(sem cadastro)')}</td>
-      <td>${escapeHtml(r.placa)}</td>
-      <td>${escapeHtml(r.relacionamento)}</td>
+      <td class="rv-col-tipo">${escapeHtml(r.tipo || '(sem cadastro)')}</td>
+      <td class="rv-col-placa">${escapeHtml(r.placa)}</td>
+      <td class="rv-col-relac">${escapeHtml(r.relacionamento)}</td>
       <td>${fmtMoeda(r.freteColeta)}</td><td>${fmtNum(r.pesoColeta)}</td><td>${r.baixaColeta}</td>
       <td>${fmtMoeda(r.freteEntrega)}</td><td>${fmtNum(r.pesoEntrega)}</td><td>${r.baixaEntrega}</td>
       <td>${fmtMoeda(r.freteTotal)}</td><td>${fmtNum(r.pesoTotal)}</td><td>${r.baixaTotal}</td>
@@ -1104,7 +1112,7 @@ function montarTabelaResultadosEditavel(c) {
     const id = idSafe(nome);
     return `
     <tr class="rv-subtotal ${classeLinhaPorRelacionamento(nome)}">
-      <td colspan="3">Subtotal ${escapeHtml(nome)} (${ac.qtdPlacas} placas)</td>
+      <td class="rv-col-label-fixa" colspan="3">Subtotal ${escapeHtml(nome)} (${ac.qtdPlacas} placas)</td>
       <td>${fmtMoeda(ac.freteColeta)}</td><td>${fmtNum(ac.pesoColeta)}</td><td>${ac.baixaColeta}</td>
       <td>${fmtMoeda(ac.freteEntrega)}</td><td>${fmtNum(ac.pesoEntrega)}</td><td>${ac.baixaEntrega}</td>
       <td>${fmtMoeda(ac.freteTotal)}</td><td>${fmtNum(ac.pesoTotal)}</td><td>${ac.baixaTotal}</td>
@@ -1132,7 +1140,7 @@ function montarTabelaResultadosEditavel(c) {
     <div class="table-wrapper">
       <table class="rv-table">
         <thead><tr>
-          <th>Tipo</th><th>Placa</th><th>Relac.</th>
+          <th class="rv-col-tipo">Tipo</th><th class="rv-col-placa">Placa</th><th class="rv-col-relac">Relac.</th>
           <th>Frete Coleta</th><th>Peso Coleta</th><th>Baixa Coleta</th>
           <th>Frete Entrega</th><th>Peso Entrega</th><th>Baixa Entrega</th>
           <th>Frete Total</th><th>Peso Total</th><th>Baixa Total</th>
@@ -1142,7 +1150,7 @@ function montarTabelaResultadosEditavel(c) {
         <tbody>
           ${corpo}
           <tr class="rv-total">
-            <td colspan="3">TOTAL GERAL (${c.totalGeral.qtdPlacas} placas)</td>
+            <td class="rv-col-label-fixa" colspan="3">TOTAL GERAL (${c.totalGeral.qtdPlacas} placas)</td>
             <td>${fmtMoeda(c.totalGeral.freteColeta)}</td><td>${fmtNum(c.totalGeral.pesoColeta)}</td><td>${c.totalGeral.baixaColeta}</td>
             <td>${fmtMoeda(c.totalGeral.freteEntrega)}</td><td>${fmtNum(c.totalGeral.pesoEntrega)}</td><td>${c.totalGeral.baixaEntrega}</td>
             <td>${fmtMoeda(c.totalGeral.freteTotal)}</td><td>${fmtNum(c.totalGeral.pesoTotal)}</td><td>${c.totalGeral.baixaTotal}</td>
