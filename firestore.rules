@@ -221,6 +221,11 @@ service cloud.firestore {
       allow write: if souQualidade();
     }
 
+    match /rv_feriados/{id} {
+      allow read: if temPermissao("resultado-veiculo");
+      allow write: if souQualidade();
+    }
+
     match /rv_importacoes/{id} {
       allow read: if temPermissao("resultado-veiculo") &&
         (vejoTudo() || resource.data.unidade == minhaUnidade());

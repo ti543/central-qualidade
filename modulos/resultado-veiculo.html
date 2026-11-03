@@ -43,9 +43,16 @@
   table.rv-table td:nth-child(1), table.rv-table td:nth-child(2), table.rv-table td:nth-child(3) { text-align: left; }
   table.rv-table tr:hover { background: #f1f5f9; }
   table.rv-table tr.rv-subtotal { background: #eef0fa; font-weight: 700; }
-  table.rv-table tr.rv-total { background: var(--qc-primary); color: #fff; font-weight: 700; }
+  table.rv-table tr.rv-total { background: #000; color: #fff; font-weight: 700; }
   table.rv-table tr.rv-total td { color: #fff; }
   table.rv-table tr.rv-sem-placa td:nth-child(2) { color: #c65911; font-weight: 700; }
+
+  /* Cores por tipo de relacionamento do veículo, igual à planilha original:
+     verde = agregado, azul = frota (próprios), sem cor = carreteiro/outro. */
+  table.rv-table tr.rv-linha-agregado { background: #e2f0d9; }
+  table.rv-table tr.rv-linha-agregado:hover { background: #cfe6bc; }
+  table.rv-table tr.rv-linha-frota { background: #dce6f1; }
+  table.rv-table tr.rv-linha-frota:hover { background: #c3d6e8; }
 
   .badge { display: inline-block; padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 600; }
   .badge-ok { background: #d4edda; color: #155724; }
@@ -292,6 +299,40 @@
           </table>
         </div>
       </div>
+
+      <div class="form-card">
+        <h3>Feriados extras por unidade</h3>
+        <p style="font-size:13px; color:#666; margin-top:-8px; margin-bottom:14px;">
+          Feriados nacionais (e os móveis, Carnaval/Sexta-feira Santa) já entram automaticamente no cálculo.
+          Cadastre aqui só os feriados estaduais/municipais de cada unidade, pra "dias trabalhados" pular
+          certo essas datas também.
+        </p>
+        <div class="form-row col3">
+          <div class="form-group">
+            <label>Unidade</label>
+            <select id="fe-unidade">
+              <option value="TODAS">TODAS as unidades</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Data</label>
+            <input type="date" id="fe-data">
+          </div>
+          <div class="form-group">
+            <label>Descrição</label>
+            <input type="text" id="fe-descricao" placeholder="Ex: Aniversário da cidade">
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-primary" id="btn-salvar-feriado">Salvar feriado</button>
+        </div>
+        <div class="table-wrapper" style="margin-top:14px;">
+          <table class="rv-table" style="min-width:500px;">
+            <thead><tr><th>Unidade</th><th>Data</th><th>Descrição</th><th></th></tr></thead>
+            <tbody id="fe-tabela"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -310,6 +351,7 @@ const UNIDADES_PADRAO = ['CMP', 'RSL', 'GRU', 'POA', 'CTB', 'ITJ', 'MTZ'];
 let perfil = null;
 let frotaCache = [];     // [{id(placa), placa, tipo, relacionamento, ativo}]
 let tarifasCache = [];   // [{id(tipo), tipo, diaria, valorServico}]
+let feriadosCache = [];  // [{id, data('AAAA-MM-DD'), unidade('TODAS' ou uma UNIDADES_PADRAO), descricao}]
 let importacoesCache = []; // metadados das semanas da unidade selecionada em "Resultados"
 let planilhaLida = null; // { linhas: [[...]], cabecalho: [...] }
 let mapaColunasEscolhido = null;
@@ -327,6 +369,101 @@ function fmtPct(v) { return ((Number(v) || 0) * 100).toLocaleString('pt-BR', { m
 function normPlaca(p) { return String(p || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
 function normTipo(t) { return String(t || '').trim().toUpperCase(); }
 function idSafe(s) { return String(s || '').replace(/[^A-Za-z0-9_-]/g, '_'); }
+
+/* =====================================================================
+   DIAS ÚTEIS E FERIADOS — "dias trabalhados" só pode contar dias de
+   segunda a sexta; uma baixa registrada no sábado, domingo ou feriado
+   precisa ser jogada pro próximo dia útil antes de entrar na contagem.
+   ===================================================================== */
+
+function paraNumero(v) {
+  if (typeof v === 'number') return v;
+  if (v === null || v === undefined) return 0;
+  let s = String(v).trim();
+  if (!s) return 0;
+  // Formato BR (ex: "22.450,32"): ponto é separador de milhar, vírgula é
+  // decimal. Só reformata assim quando tem vírgula - um número já em
+  // formato "normal" (22450.32, sem vírgula) passa direto pro parseFloat.
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+function formatarDataChave(data) {
+  const y = data.getFullYear(), m = String(data.getMonth() + 1).padStart(2, '0'), d = String(data.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function paraData(v) {
+  if (v instanceof Date && !isNaN(v.getTime())) return v;
+  if (typeof v === 'number') {
+    // fallback: serial de data do Excel, caso o cellDates não converta
+    const d = XLSX.SSF.parse_date_code(v);
+    return d ? new Date(d.y, d.m - 1, d.d) : null;
+  }
+  const s = String(v || '').trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (m) {
+    let [, d, mo, y] = m;
+    if (y.length === 2) y = (parseInt(y, 10) > 70 ? '19' : '20') + y;
+    return new Date(parseInt(y, 10), parseInt(mo, 10) - 1, parseInt(d, 10));
+  }
+  const tentativa = new Date(s);
+  return isNaN(tentativa.getTime()) ? null : tentativa;
+}
+
+// Algoritmo de Gauss/anônimo pra calcular a data da Páscoa de um ano - a
+// partir dela saem Carnaval e Sexta-feira Santa.
+function calcularPascoa(ano) {
+  const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(ano, mes - 1, dia);
+}
+
+// Feriados nacionais fixos + móveis (Carnaval seg/ter, Sexta-feira Santa).
+// Feriados estaduais/municipais variam por unidade - por isso existe o
+// cadastro de "Feriados extras por unidade" na aba Tarifas, pra completar.
+function feriadosNacionais(ano) {
+  const pascoa = calcularPascoa(ano);
+  const maisDias = (data, dias) => { const d = new Date(data.getTime()); d.setDate(d.getDate() + dias); return d; };
+  return [
+    new Date(ano, 0, 1), new Date(ano, 3, 21), new Date(ano, 4, 1), new Date(ano, 8, 7),
+    new Date(ano, 9, 12), new Date(ano, 10, 2), new Date(ano, 10, 15), new Date(ano, 10, 20), new Date(ano, 11, 25),
+    maisDias(pascoa, -48), maisDias(pascoa, -47), maisDias(pascoa, -2)
+  ].map(formatarDataChave);
+}
+
+function montarConjuntoFeriados(unidade, anoInicio, anoFim) {
+  const conjunto = new Set();
+  for (let ano = anoInicio; ano <= anoFim; ano++) feriadosNacionais(ano).forEach(f => conjunto.add(f));
+  feriadosCache.filter(f => f.unidade === 'TODAS' || f.unidade === unidade).forEach(f => conjunto.add(f.data));
+  return conjunto;
+}
+
+function ehDiaUtil(data, conjuntoFeriados) {
+  const diaSemana = data.getDay(); // 0=domingo, 6=sábado
+  if (diaSemana === 0 || diaSemana === 6) return false;
+  return !conjuntoFeriados.has(formatarDataChave(data));
+}
+
+// Joga a data pro próximo dia útil (não volta - só avança), até achar um dia
+// que não seja fim de semana nem feriado. Limite de 15 tentativas só pra
+// nunca travar num loop infinito se o conjunto de feriados vier bizarro.
+function ajustarParaDiaUtil(data, conjuntoFeriados) {
+  const d = new Date(data.getTime());
+  let tentativas = 0;
+  while (!ehDiaUtil(d, conjuntoFeriados) && tentativas < 15) {
+    d.setDate(d.getDate() + 1);
+    tentativas++;
+  }
+  return d;
+}
 
 initLayout({
   auth, db,
@@ -347,8 +484,10 @@ initLayout({
 
   await carregarFrota();
   await carregarTarifas();
+  await carregarFeriados();
   renderizarFrota();
   renderizarTarifas();
+  renderizarFeriados();
 }).catch(err => console.error('Falha ao montar layout:', err));
 
 function povoarSelectsUnidade() {
@@ -368,6 +507,9 @@ function povoarSelectsUnidade() {
     selResultados.innerHTML = `<option value="${minhaUnidade}" selected>${minhaUnidade}</option>`;
     selResultados.disabled = true;
   }
+
+  const selFeriado = document.getElementById('fe-unidade');
+  if (selFeriado) selFeriado.innerHTML = `<option value="TODAS">TODAS as unidades</option>` + UNIDADES_PADRAO.map(u => `<option value="${u}">${u}</option>`).join('');
 }
 
 function ligarEventos() {
@@ -411,6 +553,8 @@ function ligarEventos() {
   document.getElementById('btn-salvar-tarifa').addEventListener('click', salvarTarifa);
   document.getElementById('tf-importar-arquivo').addEventListener('change', importarListaDeTarifas);
   document.getElementById('btn-cancelar-edicao-tarifa').addEventListener('click', cancelarEdicaoTarifa);
+
+  document.getElementById('btn-salvar-feriado').addEventListener('click', salvarFeriado);
 }
 
 function irParaPasso(nome) {
@@ -458,7 +602,10 @@ function irParaMapeamento() {
   }
 
   const aba = livro.Sheets[nomeAba];
-  const linhas = XLSX.utils.sheet_to_json(aba, { header: 1, defval: '', raw: false });
+  // raw:true + cellDates:true - pega número e data "de verdade" da célula,
+  // em vez do texto já formatado (que quebrava peso/frete em planilha com
+  // formato brasileiro, tipo "22.450,32").
+  const linhas = XLSX.utils.sheet_to_json(aba, { header: 1, defval: '', raw: true, cellDates: true });
   // primeira linha não vazia = cabeçalho
   const idxCabecalho = linhas.findIndex(l => l.some(c => String(c).trim() !== ''));
   if (idxCabecalho < 0) { alert('Não encontrei dados nessa aba.'); return; }
@@ -520,6 +667,15 @@ function calcularResultadoSemana() {
   const placasDesconhecidas = new Set();
   const tiposSemTarifa = new Set();
 
+  // "Dias trabalhados" só pode contar dia útil (segunda a sexta) - uma
+  // baixa registrada no sábado/domingo/feriado é jogada pro próximo dia
+  // útil antes de entrar na contagem, pra não distorcer o resultado.
+  const unidadeDoCalculo = document.getElementById('lc-unidade').value;
+  const anoInicio = new Date(document.getElementById('lc-periodo-inicio').value).getFullYear();
+  const anoFim = new Date(document.getElementById('lc-periodo-fim').value).getFullYear();
+  const conjuntoFeriados = montarConjuntoFeriados(unidadeDoCalculo, anoInicio, anoFim);
+  let datasNaoReconhecidas = 0;
+
   planilhaLida.corpo.forEach(linha => {
     const placaOriginal = String(linha[mapa.placa] || '').trim();
     if (!placaOriginal) return;
@@ -527,10 +683,18 @@ function calcularResultadoSemana() {
     const tipoBaixaBruto = String(linha[mapa.tipoBaixa] || '').trim().toUpperCase();
     const tipoBaixa = tipoBaixaBruto.startsWith('C') ? 'C' : (tipoBaixaBruto.startsWith('E') ? 'E' : '');
     if (!tipoBaixa) return;
+
     const dataBruta = mapa.data >= 0 ? linha[mapa.data] : '';
-    const data = String(dataBruta || '').trim();
-    const peso = mapa.peso >= 0 ? (parseFloat(String(linha[mapa.peso]).replace(',', '.')) || 0) : 0;
-    const frete = mapa.frete >= 0 ? (parseFloat(String(linha[mapa.frete]).replace(',', '.')) || 0) : 0;
+    const dataObj = paraData(dataBruta);
+    let data;
+    if (dataObj) {
+      data = formatarDataChave(ajustarParaDiaUtil(dataObj, conjuntoFeriados));
+    } else {
+      data = String(dataBruta || '').trim();
+      if (data) datasNaoReconhecidas++;
+    }
+    const peso = mapa.peso >= 0 ? paraNumero(linha[mapa.peso]) : 0;
+    const frete = mapa.frete >= 0 ? paraNumero(linha[mapa.frete]) : 0;
 
     eventos.push({ placa: placaOriginal, tipoBaixa, data, peso, frete });
 
@@ -601,13 +765,23 @@ function calcularResultadoSemana() {
     eventos, resultadosPorPlaca,
     totaisPorRelacionamento: grupos, totalGeral,
     placasDesconhecidas: Array.from(placasDesconhecidas),
-    tiposSemTarifa: Array.from(tiposSemTarifa)
+    tiposSemTarifa: Array.from(tiposSemTarifa),
+    datasNaoReconhecidas
   };
   objetoEmEdicao = calculoAtual;
   modoEdicaoResultados = false;
 
   exibirRevisao();
   irParaPasso('revisar');
+}
+
+// Classe de cor da linha, igual à convenção da planilha original:
+// verde = agregado, azul = frota (próprios). Carreteiro/outro fica sem cor.
+function classeLinhaPorRelacionamento(relacionamento) {
+  const r = String(relacionamento || '').toUpperCase();
+  if (r === 'AGREGADO') return 'rv-linha-agregado';
+  if (r === 'FROTA') return 'rv-linha-frota';
+  return '';
 }
 
 function criarAcumulador() {
@@ -641,6 +815,9 @@ function exibirRevisao() {
   if (c.tiposSemTarifa.length) {
     avisos.push(`<strong>Tipo(s) da FROTA sem tarifa cadastrada</strong> (pagamento não calculado até cadastrar em "Tarifas"): ${c.tiposSemTarifa.map(escapeHtml).join(', ')}`);
   }
+  if (c.datasNaoReconhecidas) {
+    avisos.push(`<strong>${c.datasNaoReconhecidas} data(s) na planilha não foram reconhecidas</strong> e entraram no cálculo como texto, sem o ajuste de dia útil/feriado — confira a coluna de data no arquivo original.`);
+  }
   document.getElementById('revisar-avisos').innerHTML = `
     <div class="aviso-box aviso-info">
       "Total Pago" e "Produção Transf." vêm em branco/0 pra placas de agregado e carreteiro (e você pode
@@ -657,7 +834,7 @@ function exibirRevisao() {
 // simplesmente não têm o campo — por isso os "|| 0"/checagens abaixo.
 function montarTabelaResultados(c) {
   const linhaPlaca = (r) => `
-    <tr class="${!r.cadastrada ? 'rv-sem-placa' : ''}">
+    <tr class="${classeLinhaPorRelacionamento(r.relacionamento)} ${!r.cadastrada ? 'rv-sem-placa' : ''}">
       <td>${escapeHtml(r.tipo || '(sem cadastro)')}</td>
       <td>${escapeHtml(r.placa)}</td>
       <td>${escapeHtml(r.relacionamento)}</td>
@@ -726,7 +903,7 @@ function montarTabelaResultadosEditavel(c) {
   const linhaPlaca = (r) => {
     const chave = normPlaca(r.placa);
     return `
-    <tr class="${!r.cadastrada ? 'rv-sem-placa' : ''}">
+    <tr class="${classeLinhaPorRelacionamento(r.relacionamento)} ${!r.cadastrada ? 'rv-sem-placa' : ''}">
       <td>${escapeHtml(r.tipo || '(sem cadastro)')}</td>
       <td>${escapeHtml(r.placa)}</td>
       <td>${escapeHtml(r.relacionamento)}</td>
@@ -1415,6 +1592,62 @@ function importarListaDeTarifas(ev) {
   };
   if (ehExcel) leitor.readAsArrayBuffer(arquivo);
   else leitor.readAsText(arquivo, 'utf-8');
+}
+
+/* =====================================================================
+   FERIADOS EXTRAS POR UNIDADE — complementam os feriados nacionais (que já
+   são calculados automaticamente) com os estaduais/municipais de cada
+   unidade, usados por montarConjuntoFeriados() no cálculo de dias úteis.
+   ===================================================================== */
+
+async function carregarFeriados() {
+  const snap = await getDocs(collection(db, 'rv_feriados'));
+  feriadosCache = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+}
+
+function renderizarFeriados() {
+  const tbody = document.getElementById('fe-tabela');
+  if (!tbody) return;
+  tbody.innerHTML = feriadosCache.map(f => `
+    <tr>
+      <td>${escapeHtml(f.unidade || 'TODAS')}</td>
+      <td>${f.data ? f.data.split('-').reverse().join('/') : ''}</td>
+      <td>${escapeHtml(f.descricao || '')}</td>
+      <td style="text-align:center;">
+        <button class="btn btn-sm btn-danger" data-remover-feriado="${escapeHtml(f.id)}">Remover</button>
+      </td>
+    </tr>
+  `).join('');
+
+  document.querySelectorAll('[data-remover-feriado]').forEach(btn => {
+    btn.addEventListener('click', () => removerFeriado(btn.dataset.removerFeriado));
+  });
+}
+
+async function salvarFeriado() {
+  const unidade = document.getElementById('fe-unidade').value;
+  const data = document.getElementById('fe-data').value;
+  const descricao = document.getElementById('fe-descricao').value.trim();
+  if (!data) { alert('Escolha a data do feriado.'); return; }
+
+  const id = idSafe(`${unidade}_${data}`);
+  try {
+    await setDoc(doc(db, 'rv_feriados', id), { unidade, data, descricao, atualizadoEm: serverTimestamp() }, { merge: true });
+    document.getElementById('fe-data').value = '';
+    document.getElementById('fe-descricao').value = '';
+    await carregarFeriados();
+    renderizarFeriados();
+  } catch (err) {
+    alert('Erro ao salvar o feriado: ' + err.message);
+  }
+}
+
+async function removerFeriado(id) {
+  if (!confirm('Remover este feriado?')) return;
+  await deleteDoc(doc(db, 'rv_feriados', id));
+  await carregarFeriados();
+  renderizarFeriados();
 }
 </script>
 </body>
