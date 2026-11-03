@@ -276,7 +276,13 @@
         <div class="btn-group">
           <button class="btn btn-primary" id="btn-salvar-tarifa">Salvar tarifa</button>
           <button class="btn" id="btn-cancelar-edicao-tarifa" style="display:none;">Cancelar edição</button>
+          <span style="flex:1"></span>
+          <label class="btn" style="margin:0;">
+            Importar tarifas (Excel)
+            <input type="file" id="tf-importar-arquivo" accept=".xlsx,.xls,.xlsm,.csv,.txt" style="display:none;">
+          </label>
         </div>
+        <div id="tf-import-avisos"></div>
       </div>
       <div class="form-card">
         <div class="table-wrapper">
@@ -403,6 +409,7 @@ function ligarEventos() {
   document.getElementById('btn-exportar-comparacao').addEventListener('click', exportarComparacaoPlacas);
 
   document.getElementById('btn-salvar-tarifa').addEventListener('click', salvarTarifa);
+  document.getElementById('tf-importar-arquivo').addEventListener('change', importarListaDeTarifas);
   document.getElementById('btn-cancelar-edicao-tarifa').addEventListener('click', cancelarEdicaoTarifa);
 }
 
@@ -1056,13 +1063,17 @@ async function salvarPlaca() {
   const ativo = document.getElementById('fr-ativo').value === '1';
   if (!placa || !tipo) { alert('Preencha ao menos a placa e o tipo.'); return; }
 
-  await setDoc(doc(db, 'veiculos_frota', placa), {
-    placa, tipo, relacionamento, ativo, atualizadoEm: serverTimestamp()
-  }, { merge: true });
+  try {
+    await setDoc(doc(db, 'veiculos_frota', placa), {
+      placa, tipo, relacionamento, ativo, atualizadoEm: serverTimestamp()
+    }, { merge: true });
 
-  cancelarEdicaoPlaca();
-  await carregarFrota();
-  renderizarFrota();
+    cancelarEdicaoPlaca();
+    await carregarFrota();
+    renderizarFrota();
+  } catch (err) {
+    alert('Erro ao salvar a placa: ' + err.message);
+  }
 }
 
 async function removerPlaca(id) {
@@ -1324,11 +1335,19 @@ async function salvarTarifa() {
   const valorServico = parseFloat(document.getElementById('tf-valor-servico').value) || 0;
   if (!tipo) { alert('Preencha o tipo.'); return; }
 
-  const id = normTipo(tipo);
-  await setDoc(doc(db, 'rv_tarifas', id), { tipo, diaria, valorServico, atualizadoEm: serverTimestamp() }, { merge: true });
-  cancelarEdicaoTarifa();
-  await carregarTarifas();
-  renderizarTarifas();
+  // idSafe() - um tipo como "3/4" vira "3_4" aqui: a barra não pode ir pro
+  // id do documento (o Firestore entende "/" como separador de caminho e
+  // quebra a gravação sem avisar nada na tela). O campo "tipo" continua
+  // salvo com o texto original ("3/4"), só o id do documento é que muda.
+  const id = idSafe(normTipo(tipo));
+  try {
+    await setDoc(doc(db, 'rv_tarifas', id), { tipo, diaria, valorServico, atualizadoEm: serverTimestamp() }, { merge: true });
+    cancelarEdicaoTarifa();
+    await carregarTarifas();
+    renderizarTarifas();
+  } catch (err) {
+    alert('Erro ao salvar a tarifa: ' + err.message);
+  }
 }
 
 async function removerTarifa(id) {
@@ -1336,6 +1355,66 @@ async function removerTarifa(id) {
   await deleteDoc(doc(db, 'rv_tarifas', id));
   await carregarTarifas();
   renderizarTarifas();
+}
+
+// Importação em lote das tarifas (mesma ideia do "Importar lista de placas"
+// na Frota) - aceita Excel ou texto com colunas TIPO / DIÁRIA / VALOR POR
+// SERVIÇO em qualquer ordem, detectadas pelo nome do cabeçalho.
+function importarListaDeTarifas(ev) {
+  const arquivo = ev.target.files[0];
+  if (!arquivo) return;
+  const ehExcel = /\.(xlsx|xls|xlsm)$/i.test(arquivo.name || '');
+  const leitor = new FileReader();
+  leitor.onload = async (e) => {
+    let cabecalho, corpo;
+    if (ehExcel) {
+      const livro = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const aba = livro.Sheets[livro.SheetNames[0]];
+      const linhas = XLSX.utils.sheet_to_json(aba, { header: 1, defval: '', raw: false });
+      const idxCabecalho = linhas.findIndex(l => l.some(c => String(c).trim() !== ''));
+      if (idxCabecalho < 0) { alert('Planilha vazia.'); return; }
+      cabecalho = linhas[idxCabecalho].map(c => String(c || '').trim().toLowerCase());
+      corpo = linhas.slice(idxCabecalho + 1).filter(l => l.some(c => String(c).trim() !== ''));
+    } else {
+      const linhas = String(e.target.result || '').split(/\r?\n/).map(l => l.split(/[,;\t]/)).filter(l => l.some(c => String(c).trim() !== ''));
+      if (linhas.length < 2) { alert('Arquivo vazio.'); return; }
+      cabecalho = linhas[0].map(c => String(c || '').trim().toLowerCase());
+      corpo = linhas.slice(1);
+    }
+
+    const iTipo = cabecalho.findIndex(c => c.includes('tipo'));
+    const iDiaria = cabecalho.findIndex(c => c.includes('diaria') || c.includes('diária'));
+    const iServico = cabecalho.findIndex(c => c.includes('servico') || c.includes('serviço'));
+    if (iTipo < 0) { alert('Não encontrei uma coluna de TIPO nesse arquivo.'); return; }
+
+    const avisos = document.getElementById('tf-import-avisos');
+    avisos.innerHTML = `<div class="aviso-box">Importando ${corpo.length} tarifa(s)...</div>`;
+
+    const lote = writeBatch(db);
+    let total = 0;
+    corpo.forEach(linha => {
+      const tipo = String(linha[iTipo] || '').trim();
+      if (!tipo) return;
+      const diaria = iDiaria >= 0 ? (parseFloat(String(linha[iDiaria]).replace(',', '.')) || 0) : 0;
+      const valorServico = iServico >= 0 ? (parseFloat(String(linha[iServico]).replace(',', '.')) || 0) : 0;
+      const id = idSafe(normTipo(tipo));
+      lote.set(doc(db, 'rv_tarifas', id), { tipo, diaria, valorServico, atualizadoEm: serverTimestamp() }, { merge: true });
+      total++;
+    });
+
+    try {
+      await lote.commit();
+      avisos.innerHTML = `<div class="aviso-box">${total} tarifa(s) importada(s)/atualizada(s) com sucesso.</div>`;
+    } catch (err) {
+      avisos.innerHTML = `<div class="aviso-box">Erro ao importar: ${escapeHtml(err.message)}</div>`;
+    }
+
+    ev.target.value = '';
+    await carregarTarifas();
+    renderizarTarifas();
+  };
+  if (ehExcel) leitor.readAsArrayBuffer(arquivo);
+  else leitor.readAsText(arquivo, 'utf-8');
 }
 </script>
 </body>
