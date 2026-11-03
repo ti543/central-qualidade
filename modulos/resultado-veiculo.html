@@ -1033,7 +1033,8 @@ function montarTabelaResultados(c) {
 
   const linhaSubtotal = (nome, ac) => `
     <tr class="rv-subtotal ${classeLinhaPorRelacionamento(nome)}">
-      <td class="rv-col-label-fixa" colspan="3">Subtotal ${escapeHtml(nome)} (${ac.qtdPlacas} placas)</td>
+      <td class="rv-col-label-fixa" colspan="2">Subtotal ${escapeHtml(nome)} (${ac.qtdPlacas} placas)</td>
+      <td></td>
       <td>${fmtMoeda(ac.freteColeta)}</td><td>${fmtNum(ac.pesoColeta)}</td><td>${ac.baixaColeta}</td>
       <td>${fmtMoeda(ac.freteEntrega)}</td><td>${fmtNum(ac.pesoEntrega)}</td><td>${ac.baixaEntrega}</td>
       <td>${fmtMoeda(ac.freteTotal)}</td><td>${fmtNum(ac.pesoTotal)}</td><td>${ac.baixaTotal}</td>
@@ -1067,7 +1068,8 @@ function montarTabelaResultados(c) {
         <tbody>
           ${corpo}
           <tr class="rv-total">
-            <td class="rv-col-label-fixa" colspan="3">TOTAL GERAL (${c.totalGeral.qtdPlacas} placas)</td>
+            <td class="rv-col-label-fixa" colspan="2">TOTAL GERAL (${c.totalGeral.qtdPlacas} placas)</td>
+            <td></td>
             <td>${fmtMoeda(c.totalGeral.freteColeta)}</td><td>${fmtNum(c.totalGeral.pesoColeta)}</td><td>${c.totalGeral.baixaColeta}</td>
             <td>${fmtMoeda(c.totalGeral.freteEntrega)}</td><td>${fmtNum(c.totalGeral.pesoEntrega)}</td><td>${c.totalGeral.baixaEntrega}</td>
             <td>${fmtMoeda(c.totalGeral.freteTotal)}</td><td>${fmtNum(c.totalGeral.pesoTotal)}</td><td>${c.totalGeral.baixaTotal}</td>
@@ -1112,7 +1114,8 @@ function montarTabelaResultadosEditavel(c) {
     const id = idSafe(nome);
     return `
     <tr class="rv-subtotal ${classeLinhaPorRelacionamento(nome)}">
-      <td class="rv-col-label-fixa" colspan="3">Subtotal ${escapeHtml(nome)} (${ac.qtdPlacas} placas)</td>
+      <td class="rv-col-label-fixa" colspan="2">Subtotal ${escapeHtml(nome)} (${ac.qtdPlacas} placas)</td>
+      <td></td>
       <td>${fmtMoeda(ac.freteColeta)}</td><td>${fmtNum(ac.pesoColeta)}</td><td>${ac.baixaColeta}</td>
       <td>${fmtMoeda(ac.freteEntrega)}</td><td>${fmtNum(ac.pesoEntrega)}</td><td>${ac.baixaEntrega}</td>
       <td>${fmtMoeda(ac.freteTotal)}</td><td>${fmtNum(ac.pesoTotal)}</td><td>${ac.baixaTotal}</td>
@@ -1150,7 +1153,8 @@ function montarTabelaResultadosEditavel(c) {
         <tbody>
           ${corpo}
           <tr class="rv-total">
-            <td class="rv-col-label-fixa" colspan="3">TOTAL GERAL (${c.totalGeral.qtdPlacas} placas)</td>
+            <td class="rv-col-label-fixa" colspan="2">TOTAL GERAL (${c.totalGeral.qtdPlacas} placas)</td>
+            <td></td>
             <td>${fmtMoeda(c.totalGeral.freteColeta)}</td><td>${fmtNum(c.totalGeral.pesoColeta)}</td><td>${c.totalGeral.baixaColeta}</td>
             <td>${fmtMoeda(c.totalGeral.freteEntrega)}</td><td>${fmtNum(c.totalGeral.pesoEntrega)}</td><td>${c.totalGeral.baixaEntrega}</td>
             <td>${fmtMoeda(c.totalGeral.freteTotal)}</td><td>${fmtNum(c.totalGeral.pesoTotal)}</td><td>${c.totalGeral.baixaTotal}</td>
