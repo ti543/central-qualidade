@@ -116,7 +116,7 @@
           <div class="form-row col2" style="margin-top:16px;">
             <div class="form-group">
               <label>Planilha da semana (.xlsx, .xls ou .xlsm)</label>
-              <input type="file" id="lc-arquivo" accept=".xlsx,.xls,.xlsm">
+              <input type="file" id="lc-arquivo" accept=".xlsx,.xls,.xlsm,.csv,.txt,.sswweb">
             </div>
             <div class="form-group">
               <label>Aba da planilha</label>
@@ -640,23 +640,64 @@ function irParaPasso(nome) {
    LEITURA DA PLANILHA SEMANAL (XLSX no navegador, sem passar por servidor)
    ===================================================================== */
 
+// Acha o separador de coluna olhando só a linha de cabeçalho (que é texto
+// puro, sem número formatado) - nunca usa uma classe de caracteres tipo
+// /[,;\t]/ pra cortar linha por linha, porque aí ia cortar errado também
+// nas vírgulas decimais dos valores (ex: "6.217,32" virava duas colunas).
+function detectarDelimitadorTexto(linhaCabecalho) {
+  const candidatos = [';', ',', '\t'];
+  let melhor = ';', melhorContagem = -1;
+  candidatos.forEach(d => {
+    const contagem = linhaCabecalho.split(d).length - 1;
+    if (contagem > melhorContagem) { melhorContagem = contagem; melhor = d; }
+  });
+  return melhor;
+}
+
 function lerArquivoPlanilha() {
   const input = document.getElementById('lc-arquivo');
   const arquivo = input.files[0];
   const selAba = document.getElementById('lc-aba');
   if (!arquivo) { selAba.innerHTML = '<option>Escolha o arquivo primeiro...</option>'; selAba.disabled = true; return; }
 
+  const ehExcel = /\.(xlsx|xls|xlsm)$/i.test(arquivo.name || '');
   const leitor = new FileReader();
-  leitor.onload = (e) => {
-    const livro = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-    window._rvLivro = livro;
-    selAba.innerHTML = livro.SheetNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
-    selAba.disabled = false;
-    // tenta já pré-selecionar uma aba chamada "Filtro" (como no modelo atual)
-    const idxFiltro = livro.SheetNames.findIndex(n => /filtro/i.test(n));
-    if (idxFiltro >= 0) selAba.value = livro.SheetNames[idxFiltro];
-  };
-  leitor.readAsArrayBuffer(arquivo);
+
+  if (ehExcel) {
+    leitor.onload = (e) => {
+      const livro = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      window._rvLivro = livro;
+      selAba.innerHTML = livro.SheetNames.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+      selAba.disabled = false;
+      // tenta já pré-selecionar uma aba chamada "Filtro" (como no modelo atual)
+      const idxFiltro = livro.SheetNames.findIndex(n => /filtro/i.test(n));
+      if (idxFiltro >= 0) selAba.value = livro.SheetNames[idxFiltro];
+    };
+    leitor.readAsArrayBuffer(arquivo);
+  } else {
+    // Arquivo de texto (export direto do SSW, tipo .sswweb/.csv/.txt) - NÃO
+    // passa pelo XLSX.read em modo "array", porque o detector de tipo de
+    // célula dele erra o formato BR (vírgula decimal/ponto de milhar) e
+    // transforma "756,65" em 75665, "2,50" em 250 etc - exatamente o motivo
+    // dos valores de peso/frete terem saído multiplicados por 100 (ou
+    // errados pra menos, dependendo do número). Em vez disso lê como texto
+    // puro e guarda cada célula como string, pra paraNumero() converter
+    // certo depois.
+    leitor.onload = (e) => {
+      const texto = String(e.target.result || '');
+      const linhasTexto = texto.split(/\r?\n/).filter(l => l.trim() !== '');
+      if (!linhasTexto.length) { alert('Arquivo vazio.'); return; }
+      const delim = detectarDelimitadorTexto(linhasTexto[0]);
+      const aoa = linhasTexto.map(l => l.split(delim));
+      const planilha = XLSX.utils.aoa_to_sheet(aoa);
+      const livro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(livro, planilha, 'Dados');
+      window._rvLivro = livro;
+      selAba.innerHTML = `<option value="Dados">Dados</option>`;
+      selAba.disabled = false;
+    };
+    leitor.readAsText(arquivo, 'utf-8');
+  }
 }
 
 // Nomes de coluna EXATOS (match completo, prioridade 1) e PARTES de nome
