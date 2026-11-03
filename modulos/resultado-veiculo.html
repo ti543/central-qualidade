@@ -208,10 +208,10 @@
             </select>
           </div>
           <div class="form-group">
-            <label>Situação</label>
+            <label>Situação (aparece no relatório?)</label>
             <select id="fr-ativo">
-              <option value="1">Ativo</option>
-              <option value="0">Inativo</option>
+              <option value="1">Ativo — entra no relatório</option>
+              <option value="0">Inativo — não entra no relatório</option>
             </select>
           </div>
         </div>
@@ -750,7 +750,7 @@ function calcularResultadoSemana() {
 
   const eventos = [];
   const porPlaca = {};
-  const placasDesconhecidas = new Set();
+  const placasForaDoRelatorio = []; // [{placa, motivo}] - igual à coluna "PLACA OK" da planilha: só placa cadastrada E marcada "Ativo" entra no relatório; o resto fica de fora (mas listado aqui pra avisar)
   const tiposSemTarifa = new Set();
 
   // "Dias trabalhados" só pode contar dia útil (segunda a sexta) - uma
@@ -804,10 +804,21 @@ function calcularResultadoSemana() {
       }
     }
 
-    if (!frotaPorPlaca[placa]) placasDesconhecidas.add(placaOriginal);
   });
 
-  const resultadosPorPlaca = Object.keys(porPlaca).map(placa => {
+  const resultadosPorPlaca = Object.keys(porPlaca).filter(placa => {
+    // Igual à coluna "PLACA OK" da planilha original: ela compara a placa
+    // da baixa com a lista mestre de placas (ali colada à mão, aqui é o
+    // cadastro "Frota") e só deixa entrar no relatório quem bate "SIM" -
+    // o resto nem aparece. Aqui, "SIM" = placa cadastrada E Ativa.
+    const cadastro = frotaPorPlaca[placa] || null;
+    const ok = !!cadastro && cadastro.ativo !== false;
+    if (!ok) {
+      const motivo = cadastro ? 'cadastrada como Inativa' : 'não cadastrada na Frota';
+      placasForaDoRelatorio.push({ placa: porPlaca[placa].placaOriginal, motivo });
+    }
+    return ok;
+  }).map(placa => {
     const p = porPlaca[placa];
     const cadastro = frotaPorPlaca[placa] || null;
     const tipo = cadastro ? normTipo(cadastro.tipo) : '';
@@ -860,7 +871,7 @@ function calcularResultadoSemana() {
     nomeArquivo: document.getElementById('lc-arquivo').files[0]?.name || '',
     eventos, resultadosPorPlaca,
     totaisPorRelacionamento: grupos, totalGeral,
-    placasDesconhecidas: Array.from(placasDesconhecidas),
+    placasForaDoRelatorio,
     tiposSemTarifa: Array.from(tiposSemTarifa),
     datasNaoReconhecidas
   };
@@ -905,8 +916,9 @@ function exibirRevisao() {
   `;
 
   const avisos = [];
-  if (c.placasDesconhecidas.length) {
-    avisos.push(`<strong>${c.placasDesconhecidas.length} placa(s) não cadastrada(s) na Frota</strong> (entraram no total, mas sem tipo/relacionamento até você cadastrar): ${c.placasDesconhecidas.map(escapeHtml).join(', ')}`);
+  if (c.placasForaDoRelatorio.length) {
+    const lista = c.placasForaDoRelatorio.map(x => `${escapeHtml(x.placa)} (${escapeHtml(x.motivo)})`).join(', ');
+    avisos.push(`<strong>${c.placasForaDoRelatorio.length} placa(s) ficaram FORA deste relatório</strong> — igual à coluna "PLACA OK" da planilha original, só placa cadastrada na Frota e marcada "Ativo" entra no total. Cadastre/ative e lance de novo se alguma dessas devia entrar: ${lista}`);
   }
   if (c.tiposSemTarifa.length) {
     avisos.push(`<strong>Tipo(s) da FROTA sem tarifa cadastrada</strong> (pagamento não calculado até cadastrar em "Tarifas"): ${c.tiposSemTarifa.map(escapeHtml).join(', ')}`);
