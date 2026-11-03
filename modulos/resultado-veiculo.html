@@ -4,7 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Resultado por Veículo</title>
+<link rel="icon" href="../assets/icons/icon-192.png">
+<link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <link href="../assets/layout.css" rel="stylesheet">
 <style>
   .container { max-width: 1300px; margin: 0 auto; padding: 0; }
@@ -52,11 +55,15 @@
   table.rv-table tr.rv-sem-placa td:nth-child(2) { color: #c65911; font-weight: 700; }
 
   /* Cores por tipo de relacionamento do veículo, igual à planilha original:
-     verde = agregado, azul = frota (próprios), sem cor = carreteiro/outro. */
-  table.rv-table tr.rv-linha-agregado { background: #e2f0d9; }
-  table.rv-table tr.rv-linha-agregado:hover { background: #cfe6bc; }
-  table.rv-table tr.rv-linha-frota { background: #dce6f1; }
-  table.rv-table tr.rv-linha-frota:hover { background: #c3d6e8; }
+     verde = agregado, azul = frota (próprios), sem cor = carreteiro/outro.
+     Tons fortes (iguais aos usados no Excel exportado), por isso o texto
+     vira branco pra manter a leitura. */
+  table.rv-table tr.rv-linha-agregado { background: #538135; color: #fff; }
+  table.rv-table tr.rv-linha-agregado td { color: #fff; }
+  table.rv-table tr.rv-linha-agregado:hover { background: #45702c; }
+  table.rv-table tr.rv-linha-frota { background: #2e75b6; color: #fff; }
+  table.rv-table tr.rv-linha-frota td { color: #fff; }
+  table.rv-table tr.rv-linha-frota:hover { background: #255f94; }
 
   .badge { display: inline-block; padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 600; }
   .badge-ok { background: #d4edda; color: #155724; }
@@ -1309,25 +1316,143 @@ async function salvarEdicaoValoresManuais() {
   }
 }
 
-function exportarResultadoExcel() {
+// Exporta a semana selecionada pra Excel igualzinho à tabela da tela:
+// mesmas 20 colunas, na mesma ordem, com subtotal por grupo e TOTAL GERAL,
+// e as mesmas cores (verde = agregado, azul = frota, preto = total) com
+// letra branca. Usa ExcelJS (o xlsx/SheetJS normal não escreve cor de
+// célula na versão gratuita).
+const COR_CABECALHO = 'FF000080';
+const COR_AGREGADO = 'FF538135';
+const COR_FROTA = 'FF2E75B6';
+const COR_SUBTOTAL = 'FFEEF0FA';
+const COR_TOTAL = 'FF000000';
+const BRANCO = 'FFFFFFFF';
+
+const COLUNAS_RESULTADO = [
+  { chave: 'tipo', titulo: 'Tipo', largura: 10 },
+  { chave: 'placa', titulo: 'Placa', largura: 12 },
+  { chave: 'relacionamento', titulo: 'Relac.', largura: 13 },
+  { chave: 'freteColeta', titulo: 'Frete Coleta', fmt: 'moeda', largura: 14 },
+  { chave: 'pesoColeta', titulo: 'Peso Coleta', fmt: 'peso', largura: 13 },
+  { chave: 'baixaColeta', titulo: 'Baixa Coleta', largura: 12 },
+  { chave: 'freteEntrega', titulo: 'Frete Entrega', fmt: 'moeda', largura: 14 },
+  { chave: 'pesoEntrega', titulo: 'Peso Entrega', fmt: 'peso', largura: 13 },
+  { chave: 'baixaEntrega', titulo: 'Baixa Entrega', largura: 12 },
+  { chave: 'freteTotal', titulo: 'Frete Total', fmt: 'moeda', largura: 14 },
+  { chave: 'pesoTotal', titulo: 'Peso Total', fmt: 'peso', largura: 13 },
+  { chave: 'baixaTotal', titulo: 'Baixa Total', largura: 11 },
+  { chave: 'diasTotal', titulo: 'Dias Trab.', largura: 10 },
+  { chave: 'servicosPorDia', titulo: 'Serv./dia', fmt: 'dec1', largura: 10 },
+  { chave: 'totalPago', titulo: 'Total Pago', fmt: 'moeda', largura: 13 },
+  { chave: 'producaoTransferencia', titulo: 'Produção Transf.', fmt: 'moeda', largura: 15 },
+  { chave: 'pagoPorTonelada', titulo: 'Pago/ton.', fmt: 'moeda', largura: 12 },
+  { chave: 'resultado', titulo: 'Resultado', fmt: 'pct', largura: 11 },
+  { chave: 'resultadoTotal', titulo: 'Resultado Total', fmt: 'pct', largura: 14 },
+  { chave: 'regiao', titulo: 'Região', largura: 14 },
+];
+
+function numFmtPorTipo(fmt) {
+  if (fmt === 'moeda') return '"R$" #,##0.00';
+  if (fmt === 'peso') return '#,##0';
+  if (fmt === 'dec1') return '#,##0.0';
+  if (fmt === 'pct') return '0.0%';
+  return undefined;
+}
+
+function pintarLinha(row, corFundoArgb, corTextoArgb) {
+  row.eachCell({ includeEmpty: true }, cell => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: corFundoArgb } };
+    if (corTextoArgb) cell.font = { ...(cell.font || {}), color: { argb: corTextoArgb }, bold: !!cell.font?.bold };
+  });
+}
+
+async function exportarResultadoExcel() {
   const id = document.getElementById('rs-importacao').value;
   const imp = importacoesCache.find(i => i.id === id);
   if (!imp) { alert('Selecione uma semana primeiro.'); return; }
 
-  const linhas = imp.resultadosPorPlaca.map(r => ({
-    Tipo: r.tipo, Placa: r.placa, Relacionamento: r.relacionamento,
-    'Frete Coleta': r.freteColeta, 'Peso Coleta': r.pesoColeta, 'Baixa Coleta': r.baixaColeta,
-    'Frete Entrega': r.freteEntrega, 'Peso Entrega': r.pesoEntrega, 'Baixa Entrega': r.baixaEntrega,
-    'Frete Total': r.freteTotal, 'Peso Total': r.pesoTotal, 'Baixa Total': r.baixaTotal,
-    'Dias Trabalhados': r.diasTotal, 'Serviços/dia': r.servicosPorDia,
-    'Total Pago': r.totalPago, 'Produção Transferência': r.producaoTransferencia || 0,
-    'Pago/Tonelada': r.pagoPorTonelada, 'Resultado': r.resultado, 'Resultado Total': r.resultadoTotal,
-    'Região': r.regiao || ''
-  }));
-  const planilha = XLSX.utils.json_to_sheet(linhas);
-  const livro = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(livro, planilha, 'Resultado');
-  XLSX.writeFile(livro, `Resultado_${imp.unidade}_${imp.periodoInicio}_a_${imp.periodoFim}.xlsx`);
+  const btn = document.getElementById('btn-exportar-resultado');
+  const textoOriginal = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Gerando...'; }
+
+  try {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Resultado');
+    ws.columns = COLUNAS_RESULTADO.map(c => ({ width: c.largura }));
+
+    const headerRow = ws.addRow(COLUNAS_RESULTADO.map(c => c.titulo));
+    headerRow.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COR_CABECALHO } };
+      cell.font = { bold: true, color: { argb: BRANCO } };
+      cell.alignment = { horizontal: 'center' };
+    });
+
+    const linhaPlaca = (r) => {
+      const row = ws.addRow(COLUNAS_RESULTADO.map(c => {
+        const v = r[c.chave];
+        return (v === null || v === undefined) ? '' : v;
+      }));
+      COLUNAS_RESULTADO.forEach((c, i) => {
+        const fmt = numFmtPorTipo(c.fmt);
+        if (fmt) row.getCell(i + 1).numFmt = fmt;
+      });
+      const rel = (r.relacionamento || '').toUpperCase();
+      if (rel === 'AGREGADO') pintarLinha(row, COR_AGREGADO, BRANCO);
+      else if (rel === 'FROTA') pintarLinha(row, COR_FROTA, BRANCO);
+    };
+
+    const linhaSubtotal = (nome, ac) => {
+      const dados = { ...ac, tipo: `Subtotal ${nome} (${ac.qtdPlacas} placas)`, placa: '', relacionamento: '' };
+      const row = ws.addRow(COLUNAS_RESULTADO.map(c => {
+        const v = dados[c.chave];
+        return (v === null || v === undefined) ? '' : v;
+      }));
+      ws.mergeCells(row.number, 1, row.number, 3);
+      COLUNAS_RESULTADO.forEach((c, i) => {
+        if (i < 3) return;
+        const fmt = numFmtPorTipo(c.fmt);
+        if (fmt) row.getCell(i + 1).numFmt = fmt;
+      });
+      row.font = { bold: true };
+      pintarLinha(row, COR_SUBTOTAL, null);
+    };
+
+    Object.keys(imp.totaisPorRelacionamento).sort().forEach(grupo => {
+      imp.resultadosPorPlaca.filter(r => (r.relacionamento || 'OUTRO') === grupo).forEach(linhaPlaca);
+      linhaSubtotal(grupo, imp.totaisPorRelacionamento[grupo]);
+    });
+
+    const dadosTotal = { ...imp.totalGeral, tipo: `TOTAL GERAL (${imp.totalGeral.qtdPlacas} placas)`, placa: '', relacionamento: '' };
+    const rowTotal = ws.addRow(COLUNAS_RESULTADO.map(c => {
+      const v = dadosTotal[c.chave];
+      return (v === null || v === undefined) ? '' : v;
+    }));
+    ws.mergeCells(rowTotal.number, 1, rowTotal.number, 3);
+    COLUNAS_RESULTADO.forEach((c, i) => {
+      if (i < 3) return;
+      const fmt = numFmtPorTipo(c.fmt);
+      if (fmt) rowTotal.getCell(i + 1).numFmt = fmt;
+    });
+    pintarLinha(rowTotal, COR_TOTAL, BRANCO);
+
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Resultado_${imp.unidade}_${imp.periodoInicio}_a_${imp.periodoFim}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error(e);
+    alert('Erro ao gerar o Excel: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = textoOriginal; }
+  }
 }
 
 async function excluirImportacaoSelecionada() {
