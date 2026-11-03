@@ -1,7 +1,7 @@
 rules_version = "2";
 
 // ============================================================================
-// REGRAS DO FIRESTORE — Central de Qualidade
+// REGRAS DO FIRESTORE — Portal da Qualidade
 // Cole isto em: Firebase Console > Firestore Database > Regras > Publicar.
 //
 // Modelo:

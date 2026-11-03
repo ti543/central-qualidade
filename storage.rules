@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Regras do Firebase Storage para a Central da Qualidade.
+// Regras do Firebase Storage para o Portal da Qualidade.
 //
 // Leitura: qualquer usuário autenticado no sistema pode baixar os
 // documentos da Biblioteca (Manual da Qualidade, PG, IT, etc.) — é

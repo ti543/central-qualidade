@@ -1,5 +1,5 @@
 /* =========================================================================
-   CENTRAL DA QUALIDADE — LAYOUT PADRÃO (shell compartilhado)
+   PORTAL DA QUALIDADE — LAYOUT PADRÃO (shell compartilhado)
    Módulo ES importado por todas as páginas (index.html e web/modulos/*.html).
    Cuida de: guarda de login, sidebar de navegação, topbar com título/ISO,
    badge de usuário e logout. Cada página só cuida do próprio conteúdo.
@@ -54,7 +54,7 @@ export function garantirEsqueleto({ homeHref }) {
         <aside class="qc-sidebar" id="qc-sidebar">
           <div class="qc-sidebar-logo">
             <img src="${LOGO_URL}" alt="MirindoSul">
-            <span>Central da<br>Qualidade</span>
+            <span>Portal da<br>Qualidade</span>
           </div>
           <nav class="qc-sidebar-nav" id="qc-sidebar-nav"></nav>
           <div class="qc-sidebar-footer">

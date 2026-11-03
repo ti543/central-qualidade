@@ -1,5 +1,5 @@
 /* =========================================================================
-   CENTRAL DA QUALIDADE — Service Worker
+   PORTAL DA QUALIDADE — Service Worker
    Só existe pra habilitar o "Instalar app" no navegador (PWA) e dar uma
    experiência melhor de carregamento. NÃO guarda dados do Firestore nem
    funciona como app totalmente offline — login e dados sempre exigem rede.
