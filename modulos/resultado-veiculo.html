@@ -106,9 +106,21 @@
   .busca-input { max-width: 320px; margin-bottom: 14px; }
 
   .pill-contador { display: inline-block; background: #eef0fa; color: var(--qc-primary); font-weight: 700; padding: 4px 12px; border-radius: 20px; font-size: 13px; margin-left: 8px; }
+
+  /* Barra de rolagem horizontal "fantasma": espelha a tabela larga ativa e
+     fica fixa embaixo da tela, pra não precisar rolar pra cima/baixo só pra
+     achar a barra de rolagem de verdade quando a tabela é alta. */
+  #rv-scroll-ghost {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 16px; z-index: 800;
+    overflow-x: scroll; overflow-y: hidden; background: #f1f1f1;
+    border-top: 1px solid #ccc; display: none;
+  }
+  #rv-scroll-ghost-inner { height: 1px; }
 </style>
 </head>
 <body>
+
+<div id="rv-scroll-ghost"><div id="rv-scroll-ghost-inner"></div></div>
 
 <div id="qc-page-content">
   <div class="container">
@@ -2134,6 +2146,82 @@ async function removerRegiao(id) {
   await carregarRegioes();
   renderizarRegioes();
 }
+
+/* =========================================================================
+   BARRA DE ROLAGEM HORIZONTAL FANTASMA
+   As tabelas de resultado são bem largas e usam a barra de rolagem própria
+   do .table-wrapper (embaixo da tabela). Só que numa tabela alta, rolar a
+   PÁGINA pra baixo também joga essa barra fora da tela — daí a reclamação
+   de ter que voltar pro topo só pra conseguir arrastar pro lado.
+   Esta barra fica fixa (position:fixed) no rodapé da janela, sempre visível
+   enquanto existir uma tabela larga aberta na aba atual, e espelha o scroll
+   horizontal dela nos dois sentidos.
+   ========================================================================= */
+(function () {
+  const ghost = document.getElementById('rv-scroll-ghost');
+  const ghostInner = document.getElementById('rv-scroll-ghost-inner');
+  if (!ghost || !ghostInner) return;
+
+  let wrapperAtivo = null;
+  let sincronizando = false;
+
+  function tabelaLargaVisivel() {
+    const candidatos = document.querySelectorAll('.table-wrapper');
+    for (const el of candidatos) {
+      if (el.offsetParent === null) continue; // escondido (aba inativa, display:none etc.)
+      if (el.scrollWidth > el.clientWidth + 2) return el;
+    }
+    return null;
+  }
+
+  function atualizarGhost() {
+    const wrapper = tabelaLargaVisivel();
+
+    if (!wrapper) {
+      wrapperAtivo = null;
+      ghost.style.display = 'none';
+      return;
+    }
+
+    if (wrapper !== wrapperAtivo) {
+      wrapperAtivo = wrapper;
+    }
+
+    ghost.style.display = 'block';
+    ghostInner.style.width = wrapper.scrollWidth + 'px';
+    if (Math.abs(ghost.scrollLeft - wrapper.scrollLeft) > 1) {
+      sincronizando = true;
+      ghost.scrollLeft = wrapper.scrollLeft;
+      sincronizando = false;
+    }
+  }
+
+  ghost.addEventListener('scroll', () => {
+    if (sincronizando || !wrapperAtivo) return;
+    wrapperAtivo.scrollLeft = ghost.scrollLeft;
+  });
+
+  // Delegação: cobre qualquer .table-wrapper, mesmo os recriados via innerHTML.
+  document.addEventListener('scroll', (ev) => {
+    if (ev.target && ev.target.classList && ev.target.classList.contains('table-wrapper') && ev.target === wrapperAtivo) {
+      if (sincronizando) return;
+      sincronizando = true;
+      ghost.scrollLeft = ev.target.scrollLeft;
+      sincronizando = false;
+    }
+  }, true);
+
+  window.addEventListener('resize', atualizarGhost);
+
+  // A tela troca de aba e re-renderiza tabelas via innerHTML a toda hora;
+  // observar o DOM é mais robusto do que tentar enganchar em cada função de
+  // render existente.
+  const observer = new MutationObserver(() => atualizarGhost());
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  setInterval(atualizarGhost, 600);
+  atualizarGhost();
+})();
 </script>
 </body>
 </html>
