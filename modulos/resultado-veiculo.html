@@ -192,7 +192,7 @@
           <div class="btn-group">
             <button class="btn" id="btn-voltar-revisar">&larr; Voltar</button>
             <button class="btn" id="btn-exportar-revisao">Exportar Excel</button>
-            <button class="btn btn-primary" id="btn-salvar-importacao">Salvar semana</button>
+            <button class="btn btn-primary" id="btn-salvar-importacao">Salvar</button>
           </div>
         </div>
       </div>
@@ -257,7 +257,7 @@
           </div>
         </div>
         <div class="btn-group">
-          <button class="btn btn-primary" id="btn-salvar-placa">Salvar placa</button>
+          <button class="btn btn-primary" id="btn-salvar-placa">Salvar</button>
           <button class="btn" id="btn-cancelar-edicao-placa" style="display:none;">Cancelar edição</button>
           <span style="flex:1"></span>
           <label class="btn" style="margin:0;">
@@ -326,7 +326,7 @@
           </div>
         </div>
         <div class="btn-group">
-          <button class="btn btn-primary" id="btn-salvar-tarifa">Salvar tarifa</button>
+          <button class="btn btn-primary" id="btn-salvar-tarifa">Salvar</button>
           <button class="btn" id="btn-cancelar-edicao-tarifa" style="display:none;">Cancelar edição</button>
           <span style="flex:1"></span>
           <label class="btn" style="margin:0;">
@@ -369,7 +369,7 @@
           </div>
         </div>
         <div class="btn-group">
-          <button class="btn btn-primary" id="btn-salvar-feriado">Salvar feriado</button>
+          <button class="btn btn-primary" id="btn-salvar-feriado">Salvar</button>
         </div>
         <div class="table-wrapper" style="margin-top:14px;">
           <table class="rv-table" style="min-width:500px;">
@@ -1265,7 +1265,7 @@ async function salvarImportacao() {
   } catch (err) {
     alert('Erro ao salvar: ' + err.message);
   } finally {
-    btn.disabled = false; btn.textContent = 'Salvar semana';
+    btn.disabled = false; btn.textContent = 'Salvar';
   }
 }
 
@@ -1326,7 +1326,7 @@ function iniciarEdicaoValoresManuais() {
     ${montarTabelaResultadosEditavel(imp)}
     <div class="btn-group">
       <button class="btn" id="btn-cancelar-edicao-valores">Cancelar</button>
-      <button class="btn btn-primary" id="btn-salvar-edicao-valores">Salvar alterações</button>
+      <button class="btn btn-primary" id="btn-salvar-edicao-valores">Salvar</button>
     </div>
   `;
 
@@ -1356,7 +1356,7 @@ async function salvarEdicaoValoresManuais() {
   } catch (err) {
     alert('Erro ao salvar: ' + err.message);
   } finally {
-    btn.disabled = false; btn.textContent = 'Salvar alterações';
+    btn.disabled = false; btn.textContent = 'Salvar';
   }
 }
 

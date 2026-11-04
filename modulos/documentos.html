@@ -958,9 +958,7 @@
           <div id="doc-form-conteudo-editor"></div>
           <div class="doc-form-rodape">
             <button type="button" class="qc-btn" id="doc-form-cancelar">Cancelar</button>
-            <button type="button" class="qc-btn qc-btn-primary" id="doc-form-salvar">
-              ${d ? 'Salvar nova revisão' : 'Criar documento'}
-            </button>
+            <button type="button" class="qc-btn qc-btn-primary" id="doc-form-salvar">Salvar</button>
           </div>
         </div>
       `;
@@ -1092,7 +1090,7 @@
           if (existente) {
             if (!confirm('Já existe um documento com esse código nessa categoria. Quer sobrescrever (vira uma nova revisão dele)?')) {
               btnSalvar.disabled = false;
-              btnSalvar.textContent = 'Criar documento';
+              btnSalvar.textContent = 'Salvar';
               return;
             }
             await addDoc(collection(docRef, 'versoes_obsoletas'), {
@@ -1127,7 +1125,7 @@
         console.error('Erro ao salvar documento:', err);
         alert('Não foi possível salvar o documento agora.');
         btnSalvar.disabled = false;
-        btnSalvar.textContent = idExistente ? 'Salvar nova revisão' : 'Criar documento';
+        btnSalvar.textContent = 'Salvar';
       }
     }
 

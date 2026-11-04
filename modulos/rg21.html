@@ -235,7 +235,7 @@
         </div>
 
         <div class="btn-group">
-          <button class="btn btn-primary" id="btn-salvar">Salvar ocorrência</button>
+          <button class="btn btn-primary" id="btn-salvar">Salvar</button>
           <button class="btn" id="btn-limpar">Limpar</button>
         </div>
       </div>
@@ -647,7 +647,7 @@
       }
       alert(editandoIdGlobal ? 'Ocorrência atualizada com sucesso!' : 'Ocorrência registrada com sucesso!');
       editandoIdGlobal = null;
-      document.getElementById('btn-salvar').textContent = 'Salvar ocorrência';
+      document.getElementById('btn-salvar').textContent = 'Salvar';
       limparFormulario();
       await carregarOcorrencias();
       mudarAba('lista');
@@ -655,7 +655,7 @@
       alert(`Falha ao salvar no servidor.\nMotivo técnico: ${err.message}`);
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Salvar ocorrência';
+      btn.textContent = 'Salvar';
     }
   }
 
@@ -760,7 +760,7 @@
     if (!item) return;
 
     editandoIdGlobal = id;
-    document.getElementById('btn-salvar').textContent = 'Atualizar Ocorrência';
+    document.getElementById('btn-salvar').textContent = 'Salvar';
 
     document.getElementById('numero').value = item.numero;
     document.getElementById('data').value = item.data;
@@ -801,7 +801,7 @@
 
   function limparFormulario() {
     editandoIdGlobal = null;
-    document.getElementById('btn-salvar').textContent = 'Salvar ocorrência';
+    document.getElementById('btn-salvar').textContent = 'Salvar';
 
     ['data','unidade','unidade-detectora','nfe','cte-sigla','cte-numero','cte-digito','remetente','destinatario',
      'volumes','volumesProblema','reclamacao','resumo','causador','correcao','responsavel','dataSolucao','contato','ressalva']

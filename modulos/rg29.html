@@ -233,7 +233,7 @@
         </div>
 
         <div class="btn-group">
-          <button class="btn btn-primary" id="btn-salvar">Salvar ocorrência</button>
+          <button class="btn btn-primary" id="btn-salvar">Salvar</button>
           <button class="btn" id="btn-limpar">Limpar</button>
         </div>
       </div>
@@ -681,7 +681,7 @@
       alert('Erro ao salvar: ' + err.message);
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Salvar ocorrência';
+      btn.textContent = 'Salvar';
     }
   }
 
@@ -829,7 +829,7 @@
     editandoIdGlobal = id;
     mudarAba('novo');
 
-    document.getElementById('btn-salvar').textContent = 'Atualizar Ocorrência';
+    document.getElementById('btn-salvar').textContent = 'Salvar';
     document.getElementById('numero').value = o.numero;
     document.getElementById('data').value = o.data || '';
     document.getElementById('unidade').value = o.unidadeCausadora || '';
@@ -888,7 +888,7 @@
     editandoIdGlobal = null;
     if (cteIsOpcional) alternarObrigatoriedadeCte();
 
-    document.getElementById('btn-salvar').textContent = 'Salvar ocorrência';
+    document.getElementById('btn-salvar').textContent = 'Salvar';
     document.getElementById('data').value = '';
     ['nfe','cte-sigla','cte-numero','cte-digito','remetente','destinatario','causador','correcao','responsavel','reclamacao']
       .forEach(id => document.getElementById(id).value = '');
