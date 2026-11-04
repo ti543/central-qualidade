@@ -144,20 +144,6 @@
     .doc-cab-info th { font-weight: 700; }
     .doc-cab-info td { text-align: right; font-weight: 700; color: #000050; width: 100%; }
 
-    /* TABELAS DO FIM DO DOCUMENTO — histórico de revisões e aprovação,
-       editáveis na ficha de edição e exibidas assim na leitura/PDF. */
-    .doc-tabela-fim { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 8px 0 18px; }
-    .doc-tabela-fim th { background: #eef2ff; color: #000050; text-align: left; padding: 7px 9px; font-size: 11px; text-transform: uppercase; border: 1px solid #ccc; }
-    .doc-tabela-fim td { padding: 6px 9px; border: 1px solid #ccc; vertical-align: top; }
-    .doc-form-lista-linha { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-    .doc-form-lista-linha > * { flex: 1; min-width: 0; }
-    .doc-form-lista-linha select { flex: 0 0 150px; }
-    .doc-form-lista-linha .doc-form-lista-remover {
-      flex: 0 0 auto; background: none; border: none; color: #9c0006; font-size: 17px; cursor: pointer; padding: 0 4px;
-    }
-    .doc-form-lista-add { font-size: 12px; padding: 6px 10px; }
-    .doc-aviso-lista-vazia { color: #888; font-size: 12px; margin: 0 0 8px; }
-
     .doc-conteudo-leitura {
       background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 18px;
       white-space: pre-wrap; font-size: 13.5px; line-height: 1.6; color: #333;
@@ -169,11 +155,13 @@
     .doc-conteudo-leitura.is-html { white-space: normal; }
     .doc-conteudo-leitura.is-html p, .doc-conteudo-leitura.is-html ul, .doc-conteudo-leitura.is-html ol { margin: 0 0 10px; }
     .doc-conteudo-leitura.is-html img { max-width: 100%; height: auto; border-radius: 4px; display: block; margin: 10px 0; }
-    /* Mesmo padrão sóbrio usado no título do topo da página (qc-topbar h1) —
-       sem ficar gigante/azulão só porque o Word tinha um "Título 1". */
-    .doc-conteudo-leitura.is-html h1 { font-size: 19px; font-weight: 700; color: var(--qc-primary); margin: 16px 0 8px; letter-spacing: -.01em; }
-    .doc-conteudo-leitura.is-html h2 { font-size: 16px; font-weight: 700; color: var(--qc-primary); margin: 14px 0 7px; }
-    .doc-conteudo-leitura.is-html h3 { font-size: 14px; font-weight: 700; color: var(--qc-primary); margin: 12px 0 6px; }
+    /* Preto e em negrito, igual ao padrão dos títulos numerados do Word
+       (1 OBJETIVO, 7 PAPÉIS..., 7.1 Estrutura organizacional...) — sem
+       cor, pra não ficar um título azul do nada e outro preto ao lado só
+       por causa de qual estilo do Word cada um usava. */
+    .doc-conteudo-leitura.is-html h1 { font-size: 15px; font-weight: 700; color: #000; margin: 16px 0 8px; }
+    .doc-conteudo-leitura.is-html h2 { font-size: 13.5px; font-weight: 700; color: #000; margin: 14px 0 7px; }
+    .doc-conteudo-leitura.is-html h3 { font-size: 13.5px; font-weight: 700; color: #000; margin: 12px 0 6px; }
     /* Tabelas importadas do Word — o mammoth só traz o texto de cada célula,
        sem bordas; aqui a gente desenha as bordas pra ficar igual ao Word. */
     .doc-conteudo-leitura.is-html table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 12.5px; }
@@ -285,8 +273,6 @@
     let podeEditar = false;
     let perfilAtual = null;
     let docEmEdicaoId = null; // null = criando novo
-    let edicaoHistorico = []; // linhas editáveis de "histórico de revisões" na ficha de edição
-    let edicaoAprovacoes = []; // linhas editáveis de "aprovação do documento" na ficha de edição
 
     initLayout({
       auth, db,
@@ -444,36 +430,6 @@
             <tr><th>N° revisão:</th><td>${escapeHtml(d.revisao || '00')}</td></tr>
           </table>
         </div>
-      `;
-    }
-
-    // ---------------------------------------------------------------
-    // TABELAS DO FIM DO DOCUMENTO — histórico de revisões (nº + o que
-    // mudou) e aprovação do documento (quem elaborou/aprovou). Editáveis
-    // na ficha de edição, exibidas assim na leitura e no PDF.
-    // ---------------------------------------------------------------
-    function renderTabelasFim(d) {
-      const historico = Array.isArray(d.historicoRevisoes) ? d.historicoRevisoes : [];
-      const aprovacoes = Array.isArray(d.aprovacoes) ? d.aprovacoes : [];
-      return `
-        <div class="qc-section-title" style="margin-top:22px;"><i class="bi bi-clock-history"></i> Histórico de revisões</div>
-        <table class="doc-tabela-fim">
-          <thead><tr><th style="width:90px;">Revisão</th><th>Descrição da alteração</th></tr></thead>
-          <tbody>
-            ${historico.length ? historico.map(h => `
-              <tr><td>${escapeHtml(h.revisao || '')}</td><td>${escapeHtml(h.descricao || '')}</td></tr>
-            `).join('') : `<tr><td colspan="2" style="color:#888;">Nenhuma revisão registrada.</td></tr>`}
-          </tbody>
-        </table>
-        <div class="qc-section-title"><i class="bi bi-person-check"></i> Aprovação do documento</div>
-        <table class="doc-tabela-fim">
-          <thead><tr><th style="width:170px;">Elaboração / revisão / aprovação</th><th>Nome</th><th>Função</th></tr></thead>
-          <tbody>
-            ${aprovacoes.length ? aprovacoes.map(a => `
-              <tr><td>${escapeHtml(a.papel || '')}</td><td>${escapeHtml(a.nome || '')}</td><td>${escapeHtml(a.funcao || '')}</td></tr>
-            `).join('') : `<tr><td colspan="3" style="color:#888;">Nenhuma aprovação registrada.</td></tr>`}
-          </tbody>
-        </table>
       `;
     }
 
@@ -784,7 +740,6 @@
           <button type="button" class="qc-btn" id="doc-btn-tela-cheia"><i class="bi bi-arrows-fullscreen"></i> Ler em tela cheia</button>
         </div>
         <div class="doc-conteudo-leitura${ehHtml ? ' is-html' : ''}">${renderizarConteudoParaLeitura(d.conteudo, d.conteudoFormato)}</div>
-        ${renderTabelasFim(d)}
         <div class="doc-form-rodape">
           <div>
             <label class="doc-copia-controlada-opcao"><input type="checkbox" id="doc-chk-copia-controlada"> Cópia controlada</label>
@@ -830,10 +785,11 @@
     // pdf.html() (método antigo, frágil com HTML mais complexo — tabelas,
     // cores, o editor Quill — e que às vezes saía com a página em branco),
     // agora o html2canvas "fotografa" o bloco inteiro (cabeçalho oficial +
-    // conteúdo + tabelas do fim, exatamente o que aparece na leitura) numa
-    // única imagem comprida, que é fatiada em páginas A4 — por isso o PDF
-    // sai igual ao que está na tela. Por fim escrevemos o número da página
-    // e (se marcado) "cópia controlada" no rodapé de cada página.
+    // conteúdo, exatamente o que aparece na leitura) numa única imagem
+    // comprida, que é recortada em fatias (uma por página A4, sem nenhuma
+    // sobreposição entre elas) — por isso o PDF sai igual ao que está na
+    // tela. Por fim escrevemos o número da página e (se marcado) "cópia
+    // controlada" no rodapé de cada página.
     // ---------------------------------------------------------------
     async function exportarPdf(d) {
       if (!window.jspdf || !window.jspdf.jsPDF || !window.html2canvas) {
@@ -859,11 +815,11 @@
       const alturaUtilPagina = alturaPagina - margemSuperior - margemInferior;
 
       // Monta, fora da tela, o MESMO bloco exibido na leitura (cabeçalho
-      // oficial + conteúdo + histórico/aprovação) — mesmas classes CSS,
-      // então tabelas, negrito, cor e imagens saem exatamente como no
-      // sistema. "position:fixed; left:-9999px" mantém o bloco fora da
-      // vista mas totalmente renderizado (ao contrário de display:none ou
-      // visibility:hidden, que o html2canvas captura em branco).
+      // oficial + conteúdo) — mesmas classes CSS, então tabelas, negrito,
+      // cor e imagens saem exatamente como no sistema. "position:fixed;
+      // left:-9999px" mantém o bloco fora da vista mas totalmente
+      // renderizado (ao contrário de display:none ou visibility:hidden,
+      // que o html2canvas captura em branco).
       const ehHtml = d.conteudoFormato === 'html';
       const largCaptura = 760; // largura do "papel" renderizado, em px CSS
       const container = document.createElement('div');
@@ -879,7 +835,6 @@
         <div class="doc-conteudo-leitura${ehHtml ? ' is-html' : ''}">
           ${renderizarConteudoParaLeitura(d.conteudo, d.conteudoFormato)}
         </div>
-        ${renderTabelasFim(d)}
       `;
       document.body.appendChild(container);
 
@@ -896,19 +851,36 @@
           windowWidth: largCaptura
         });
 
-        const imgData = canvas.toDataURL('image/jpeg', 0.92);
         const larguraConteudo = larguraPagina - margemLateral * 2;
-        const alturaConteudoTotal = canvas.height * larguraConteudo / canvas.width;
+        // pt por pixel do canvas (mesma escala nas duas dimensões, já que a
+        // largura não é distorcida).
+        const ptPorPx = larguraConteudo / canvas.width;
+        // Quantos pixels do canvas cabem na área útil de uma página.
+        const alturaUtilPaginaPx = Math.floor(alturaUtilPagina / ptPorPx);
 
-        // A imagem comprida inteira é desenhada em todas as páginas,
-        // deslocada pra cima a cada uma — o PDF simplesmente não desenha
-        // o que passa dos limites da página, então cada página mostra só
-        // a fatia que cabe nela (mesma técnica usada em qualquer gerador
-        // de PDF "a partir de uma captura de tela" comprida).
-        const totalPaginas = Math.max(1, Math.ceil(alturaConteudoTotal / alturaUtilPagina));
+        // Em vez de desenhar a imagem inteira em cada página deslocada
+        // (técnica que, sem clipar a sobra, repetia um pedaço do conteúdo
+        // de uma página pra outra), cada página recorta sua PRÓPRIA fatia
+        // do canvas original pra um canvas novo — sem overlap possível,
+        // cada pixel do documento aparece em uma página só.
+        const totalPaginas = Math.max(1, Math.ceil(canvas.height / alturaUtilPaginaPx));
         for (let p = 0; p < totalPaginas; p++) {
           if (p > 0) pdf.addPage();
-          pdf.addImage(imgData, 'JPEG', margemLateral, margemSuperior - p * alturaUtilPagina, larguraConteudo, alturaConteudoTotal, undefined, 'FAST');
+
+          const inicioPx = p * alturaUtilPaginaPx;
+          const alturaFatiaPx = Math.min(alturaUtilPaginaPx, canvas.height - inicioPx);
+          if (alturaFatiaPx <= 0) continue;
+
+          const fatia = document.createElement('canvas');
+          fatia.width = canvas.width;
+          fatia.height = alturaFatiaPx;
+          fatia.getContext('2d').drawImage(
+            canvas, 0, inicioPx, canvas.width, alturaFatiaPx,
+            0, 0, canvas.width, alturaFatiaPx
+          );
+
+          const alturaFatiaPt = alturaFatiaPx * ptPorPx;
+          pdf.addImage(fatia.toDataURL('image/jpeg', 0.92), 'JPEG', margemLateral, margemSuperior, larguraConteudo, alturaFatiaPt, undefined, 'FAST');
         }
       } catch (err) {
         console.error('Erro ao gerar PDF:', err);
@@ -984,23 +956,6 @@
       const categoriaAtual = d ? d.categoria : '';
       const categoriaEhPadrao = CATEGORIAS_PADRAO.includes(categoriaAtual);
 
-      // Histórico de revisões / aprovação — parte dos dados editáveis do
-      // documento, mas mantidos numa lista à parte (não são campos simples
-      // de input) por isso vivem em variáveis próprias enquanto a ficha de
-      // edição está aberta.
-      edicaoHistorico = (d && Array.isArray(d.historicoRevisoes)) ? d.historicoRevisoes.map(h => ({ ...h })) : [];
-      edicaoAprovacoes = (d && Array.isArray(d.aprovacoes)) ? d.aprovacoes.map(a => ({ ...a })) : [];
-      if (d) {
-        // Editar sempre cria uma nova revisão — já deixa uma linha pronta
-        // pra descrever o que mudou nela, se ainda não existir.
-        const proxRev = proximaRevisao(d.revisao);
-        if (!edicaoHistorico.some(h => h.revisao === proxRev)) {
-          edicaoHistorico.push({ revisao: proxRev, descricao: '' });
-        }
-      } else if (!edicaoHistorico.length) {
-        edicaoHistorico.push({ revisao: '01', descricao: 'Emissão inicial' });
-      }
-
       document.getElementById('doc-drawer-titulo').textContent = d ? 'Editar documento' : 'Novo documento';
       document.getElementById('doc-drawer-subtitulo').textContent = d
         ? `Salvar vai criar a revisão ${proximaRevisao(d.revisao)} e mover a revisão ${d.revisao || '—'} atual para o histórico.`
@@ -1046,14 +1001,6 @@
           <div id="doc-form-aviso-tabela"></div>
           <div id="doc-form-conteudo-editor"></div>
 
-          <div class="qc-section-title" style="margin-top:20px;"><i class="bi bi-clock-history"></i> Histórico de revisões</div>
-          <div id="doc-form-historico-lista"></div>
-          <button type="button" class="qc-btn doc-form-lista-add" id="doc-form-historico-add"><i class="bi bi-plus-lg"></i> Adicionar revisão</button>
-
-          <div class="qc-section-title" style="margin-top:20px;"><i class="bi bi-person-check"></i> Aprovação do documento</div>
-          <div id="doc-form-aprovacoes-lista"></div>
-          <button type="button" class="qc-btn doc-form-lista-add" id="doc-form-aprovacoes-add"><i class="bi bi-plus-lg"></i> Adicionar aprovador</button>
-
           <div class="doc-form-rodape">
             <button type="button" class="qc-btn" id="doc-form-cancelar">Cancelar</button>
             <button type="button" class="qc-btn qc-btn-primary" id="doc-form-salvar">Salvar</button>
@@ -1066,83 +1013,9 @@
       });
       document.getElementById('doc-form-cancelar').addEventListener('click', () => (d ? abrirLeitura(id) : fecharDrawer()));
       document.getElementById('doc-form-salvar').addEventListener('click', () => salvarDocumento(id));
-      document.getElementById('doc-form-historico-add').addEventListener('click', () => {
-        edicaoHistorico.push({ revisao: d ? proximaRevisao(d.revisao) : '', descricao: '' });
-        renderListaHistorico();
-      });
-      document.getElementById('doc-form-aprovacoes-add').addEventListener('click', () => {
-        edicaoAprovacoes.push({ papel: 'Elaboração', nome: '', funcao: '' });
-        renderListaAprovacoes();
-      });
 
-      renderListaHistorico();
-      renderListaAprovacoes();
       montarEditorDeConteudo(d);
       abrirDrawer();
-    }
-
-    // ---------------------------------------------------------------
-    // LISTAS EDITÁVEIS — histórico de revisões / aprovação do documento.
-    // Mantidas em variáveis à parte (edicaoHistorico/edicaoAprovacoes) e
-    // redesenhadas a cada alteração, mesmo padrão usado em outros módulos
-    // do sistema (ex: lançamento em lote de competências).
-    // ---------------------------------------------------------------
-    function renderListaHistorico() {
-      const wrap = document.getElementById('doc-form-historico-lista');
-      if (!wrap) return;
-      wrap.innerHTML = edicaoHistorico.length ? edicaoHistorico.map((h, i) => `
-        <div class="doc-form-lista-linha">
-          <input type="text" data-campo="revisao" data-i="${i}" style="flex:0 0 70px;" placeholder="Rev." value="${escapeHtml(h.revisao || '')}">
-          <input type="text" data-campo="descricao" data-i="${i}" placeholder="O que mudou nessa revisão" value="${escapeHtml(h.descricao || '')}">
-          <button type="button" class="doc-form-lista-remover" data-remover-hist="${i}" title="Remover linha"><i class="bi bi-trash"></i></button>
-        </div>
-      `).join('') : `<p class="doc-aviso-lista-vazia">Nenhuma revisão registrada ainda.</p>`;
-
-      wrap.querySelectorAll('[data-campo]').forEach(el => {
-        el.addEventListener('input', (e) => {
-          const i = parseInt(e.target.dataset.i, 10);
-          edicaoHistorico[i][e.target.dataset.campo] = e.target.value;
-        });
-      });
-      wrap.querySelectorAll('[data-remover-hist]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const i = parseInt(e.currentTarget.dataset.removerHist, 10);
-          edicaoHistorico.splice(i, 1);
-          renderListaHistorico();
-        });
-      });
-    }
-
-    const PAPEIS_APROVACAO = ['Elaboração', 'Revisão', 'Aprovação'];
-
-    function renderListaAprovacoes() {
-      const wrap = document.getElementById('doc-form-aprovacoes-lista');
-      if (!wrap) return;
-      wrap.innerHTML = edicaoAprovacoes.length ? edicaoAprovacoes.map((a, i) => `
-        <div class="doc-form-lista-linha">
-          <select data-campo="papel" data-i="${i}">
-            ${PAPEIS_APROVACAO.map(p => `<option value="${escapeHtml(p)}" ${a.papel === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
-          </select>
-          <input type="text" data-campo="nome" data-i="${i}" placeholder="Nome" value="${escapeHtml(a.nome || '')}">
-          <input type="text" data-campo="funcao" data-i="${i}" placeholder="Função" value="${escapeHtml(a.funcao || '')}">
-          <button type="button" class="doc-form-lista-remover" data-remover-aprov="${i}" title="Remover linha"><i class="bi bi-trash"></i></button>
-        </div>
-      `).join('') : `<p class="doc-aviso-lista-vazia">Nenhuma aprovação registrada ainda.</p>`;
-
-      wrap.querySelectorAll('[data-campo]').forEach(el => {
-        const evento = el.tagName === 'SELECT' ? 'change' : 'input';
-        el.addEventListener(evento, (e) => {
-          const i = parseInt(e.target.dataset.i, 10);
-          edicaoAprovacoes[i][e.target.dataset.campo] = e.target.value;
-        });
-      });
-      wrap.querySelectorAll('[data-remover-aprov]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const i = parseInt(e.currentTarget.dataset.removerAprov, 10);
-          edicaoAprovacoes.splice(i, 1);
-          renderListaAprovacoes();
-        });
-      });
     }
 
     // ---------------------------------------------------------------
@@ -1222,10 +1095,6 @@
       const dataRevisao = document.getElementById('doc-form-data-revisao').value || hojeISO();
       const conteudoVazio = !quillEditor || quillEditor.getText().trim() === '';
       const conteudo = conteudoVazio ? '' : sanitizarHtml(quillEditor.root.innerHTML);
-      // Linhas totalmente em branco (usuário adicionou e não preencheu) não
-      // vão pro Firestore.
-      const historicoRevisoes = edicaoHistorico.filter(h => (h.revisao || '').trim() || (h.descricao || '').trim());
-      const aprovacoes = edicaoAprovacoes.filter(a => (a.nome || '').trim() || (a.funcao || '').trim());
 
       if (!categoria || !codigo || !titulo) {
         alert('Preencha ao menos categoria, código e título.');
@@ -1255,7 +1124,6 @@
             dataCriacao, dataRevisao,
             conteudoFormato: 'html',
             revisao: proximaRevisao(atual ? atual.revisao : '0'),
-            historicoRevisoes, aprovacoes,
             atualizadoEm: serverTimestamp(),
             atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
           });
@@ -1282,7 +1150,6 @@
               dataCriacao, dataRevisao,
               conteudoFormato: 'html',
               revisao: proximaRevisao(existente.revisao),
-              historicoRevisoes, aprovacoes,
               atualizadoEm: serverTimestamp(),
               atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
             });
@@ -1292,7 +1159,6 @@
               dataCriacao, dataRevisao,
               conteudoFormato: 'html',
               revisao: '01',
-              historicoRevisoes, aprovacoes,
               atualizadoEm: serverTimestamp(),
               atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
             });
@@ -1321,8 +1187,6 @@
       document.getElementById('doc-drawer').classList.remove('open', 'tela-cheia');
       docEmEdicaoId = null;
       quillEditor = null;
-      edicaoHistorico = [];
-      edicaoAprovacoes = [];
     }
   </script>
 </body>
