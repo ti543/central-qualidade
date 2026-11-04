@@ -544,7 +544,8 @@ function normCidade(c) {
 
 // Devolve a(s) região(ões) especial(is) cadastrada(s) pra essa cidade, numa
 // unidade (ex: RSL cadastra "OESTE" pra Chapecó, Xanxerê etc, igual a
-// coluna "OESTE?" da planilha original - lá só marcava entregas, não coletas).
+// coluna "OESTE?" da planilha original - lá a cidade usada é a remetente
+// numa coleta e a de entrega numa entrega).
 function regioesDaCidade(unidade, cidade) {
   const c = normCidade(cidade);
   if (!c) return [];
@@ -754,7 +755,8 @@ const SINONIMOS_COLUNA = {
   data: { exatos: ['data baixa', 'data_baixa', 'databaixa', 'data'], contem: ['data baixa', 'databaixa'] },
   peso: { exatos: ['peso', 'peso calculo', 'peso cálculo', 'peso kg'], contem: ['peso'] },
   frete: { exatos: ['frete-r$', 'frete r$', 'frete', 'valor frete', 'vlr frete', 'vlr. frete'], contem: ['frete'] },
-  cidadeEntrega: { exatos: ['cidade entrega', 'cidade_entrega', 'cidadeentrega'], contem: ['cidade entrega', 'cidadeentrega'] }
+  cidadeEntrega: { exatos: ['cidade entrega', 'cidade_entrega', 'cidadeentrega'], contem: ['cidade entrega', 'cidadeentrega'] },
+  cidadeRemetente: { exatos: ['cidade remetente', 'cidade_remetente', 'cidaderemetente', 'cidade origem', 'cidade coleta'], contem: ['cidade remetente', 'cidaderemetente', 'cidade origem', 'cidade coleta'] }
 };
 
 function irParaMapeamento() {
@@ -797,7 +799,8 @@ function irParaMapeamento() {
     ['data', 'Coluna da DATA BAIXA'],
     ['peso', 'Coluna do PESO'],
     ['frete', 'Coluna do FRETE (R$)'],
-    ['cidadeEntrega', 'Coluna da CIDADE ENTREGA (opcional, só pra região/Oeste)']
+    ['cidadeEntrega', 'Coluna da CIDADE ENTREGA (opcional, só pra região/Oeste)'],
+    ['cidadeRemetente', 'Coluna da CIDADE REMETENTE (opcional, só pra região/Oeste)']
   ];
 
   const container = document.getElementById('mapa-colunas');
@@ -879,12 +882,19 @@ function calcularResultadoSemana() {
     }
     const p = porPlaca[placa];
     p.diasTotal.add(data);
-    if (tipoBaixa === 'C') { p.freteColeta += frete; p.pesoColeta += peso; p.baixaColeta += 1; p.diasColeta.add(data); }
-    else {
+    if (tipoBaixa === 'C') {
+      p.freteColeta += frete; p.pesoColeta += peso; p.baixaColeta += 1; p.diasColeta.add(data);
+      // Marca região especial (ex: RSL/Oeste) pra COLETA olhando a cidade
+      // REMETENTE, igual a coluna "OESTE?" da planilha original (lá a
+      // fórmula usa a cidade do remetente quando a baixa não é entrega).
+      if (mapa.cidadeRemetente >= 0) {
+        regioesDaCidade(unidadeDoCalculo, linha[mapa.cidadeRemetente]).forEach(reg => p.regioes.add(reg));
+      }
+    } else {
       p.freteEntrega += frete; p.pesoEntrega += peso; p.baixaEntrega += 1; p.diasEntrega.add(data);
-      // Marca região especial (ex: RSL/Oeste) só pra ENTREGA, igual a
-      // coluna "OESTE?" da planilha original - lá uma coleta pra uma
-      // cidade da região não contava, só a entrega de verdade.
+      // Marca região especial (ex: RSL/Oeste) pra ENTREGA olhando a cidade
+      // ENTREGA, igual a coluna "OESTE?" da planilha original (lá a
+      // fórmula usa a cidade de entrega quando a baixa É entrega).
       if (mapa.cidadeEntrega >= 0) {
         regioesDaCidade(unidadeDoCalculo, linha[mapa.cidadeEntrega]).forEach(reg => p.regioes.add(reg));
       }
@@ -2062,9 +2072,10 @@ async function removerFeriado(id) {
 
 /* =====================================================================
    CIDADES DE REGIÃO ESPECIAL (ex: "OESTE" da RSL) — complementam o cálculo
-   marcando a placa quando ela faz uma ENTREGA pra uma cidade cadastrada
-   aqui, igual a coluna "OESTE?" da planilha original. Usado por
-   regioesDaCidade() dentro de calcularResultadoSemana().
+   marcando a placa quando ela faz uma COLETA (cidade remetente) ou uma
+   ENTREGA (cidade entrega) pra uma cidade cadastrada aqui, igual a coluna
+   "OESTE?" da planilha original. Usado por regioesDaCidade() dentro de
+   calcularResultadoSemana().
    ===================================================================== */
 
 async function carregarRegioes() {
