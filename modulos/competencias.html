@@ -316,9 +316,6 @@
 
     function situacaoTreino(treino) {
       if (!treino || !dataValida(treino.data)) return { label: 'Pendente', cls: 'd' };
-      if (treino.statusEf === 'R') return { label: 'Refazer', cls: 'd' };
-      const dataEf = addDias(treino.data, 90);
-      if (treino.statusEf !== 'OK' && dataEf && dataEf < hojeStr()) return { label: 'Verificar eficácia', cls: 'a' };
       return { label: 'Realizado', cls: 'v' };
     }
 
@@ -481,7 +478,7 @@
           const req = cargo.req.includes(pIdx);
           body += `<td class="${req ? 'cel-req' : 'cel-na'}" style="width:${cw}px;" onclick="toggleReq(${cIdx}, ${pIdx})" title="${p.replace(/"/g,'&quot;')}">${req ? 'x' : 'na'}</td>`;
         });
-        body += `<td style="width:110px;"><select class="input-cell ${statusCls}" style="font-weight:bold;" onchange="db.cargos[${cIdx}].status=this.value; salvarDB(); renderTela();">
+        body += `<td style="width:110px;" class="${statusCls}"><select class="input-cell" style="font-weight:bold; background:transparent; color:inherit;" onchange="db.cargos[${cIdx}].status=this.value; salvarDB(); renderTela();">
             <option value="Ativo" ${cargo.status==='Ativo'?'selected':''}>Ativo</option>
             <option value="Cancelado" ${cargo.status==='Cancelado'?'selected':''}>Cancelado</option>
             <option value="Em Avaliação" ${cargo.status==='Em Avaliação'?'selected':''}>Em Avaliação</option>
@@ -538,8 +535,8 @@
           <td class="txt-l" style="font-weight:bold; width:${colWidthLabel}px;">${f.nome}</td>
           <td class="txt-l" style="width:${colWidthData}px;">${f.funcao}</td>
           <td style="width:${colWidthData}px;">${f.unidade || '-'}</td>
-          <td style="width:${colWidthData}px;">
-            <select class="input-cell ${f.status==='Ativo'?'v':'d'}" style="font-weight:bold;" onchange="atualizarFuncionario(${f.id}, 'status', this.value)">
+          <td style="width:${colWidthData}px;" class="${f.status==='Ativo'?'v':'d'}">
+            <select class="input-cell" style="font-weight:bold; background:transparent; color:inherit;" onchange="atualizarFuncionario(${f.id}, 'status', this.value)">
               <option value="Ativo" ${f.status==='Ativo'?'selected':''}>Ativo</option>
               <option value="Desligado" ${f.status==='Desligado'?'selected':''}>Desligado</option>
             </select>
@@ -605,14 +602,6 @@
       if (abaAtiva === 'funcionarios') renderTela();
     }
 
-    function atualizarTreinoStatusEf(funcId, procIdx, valor) {
-      const key = chaveTreino(funcId, procIdx);
-      if (!db.treinos[key]) db.treinos[key] = { data: '', statusEf: '-' };
-      db.treinos[key].statusEf = valor;
-      salvarDB();
-      renderFicha();
-    }
-
     function renderFicha() {
       const func = db.funcionarios.find(f => f.id === fichaFuncAtivo);
       if (!func) return;
@@ -647,7 +636,6 @@
         cargo.req.forEach(procIdx => {
           const treino = getTreino(func.id, procIdx);
           const sit = situacaoTreino(treino);
-          const dataEf = addDias(treino.data, 90);
           corpo += `
             <div class="comp-item">
               <div class="comp-item-top">
@@ -658,18 +646,6 @@
                 <div>
                   <label>Data do treinamento</label>
                   <input type="date" value="${treino.data || ''}" onchange="atualizarTreinoData(${func.id}, ${procIdx}, this.value)">
-                </div>
-                <div>
-                  <label>Verif. eficácia (+90 dias)</label>
-                  <input type="text" value="${dataEf ? fmtBR(dataEf) : '-'}" disabled>
-                </div>
-                <div>
-                  <label>Status da eficácia</label>
-                  <select onchange="atualizarTreinoStatusEf(${func.id}, ${procIdx}, this.value)">
-                    <option value="-" ${treino.statusEf==='-'?'selected':''}>-</option>
-                    <option value="OK" ${treino.statusEf==='OK'?'selected':''}>OK</option>
-                    <option value="R" ${treino.statusEf==='R'?'selected':''}>R (Refazer)</option>
-                  </select>
                 </div>
               </div>
             </div>
@@ -707,7 +683,7 @@
 
       return `
         <div class="card">
-          <h2>⚠️ Painel de Pendências (Treinamento e Verificação de Eficácia)</h2>
+          <h2>⚠️ Painel de Pendências (Treinamento)</h2>
           <div class="filter-bar">
             <select onchange="filtroPendUnidade=this.value; renderTela();">
               <option value="">Todas as unidades</option>
@@ -720,8 +696,6 @@
             <select onchange="filtroPendTipo=this.value; renderTela();">
               <option value="">Todos os tipos</option>
               <option value="Pendente" ${filtroPendTipo==='Pendente'?'selected':''}>Pendente (sem treinamento)</option>
-              <option value="Verificar eficácia" ${filtroPendTipo==='Verificar eficácia'?'selected':''}>Verificar eficácia</option>
-              <option value="Refazer" ${filtroPendTipo==='Refazer'?'selected':''}>Refazer</option>
             </select>
             <button class="btn-action grey" onclick="filtroPendUnidade='';filtroPendProcesso='';filtroPendTipo='';renderTela();">Limpar Filtros</button>
           </div>

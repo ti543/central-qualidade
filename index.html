@@ -232,8 +232,16 @@
       if (window.location.hash === '#admin' && souQualidade()) ativarAba('admin');
     } else {
       document.getElementById('qc-loading').style.display = 'none';
+      // Ao deslogar, o shell (sidebar/topbar) montado em exibirShell() ficava
+      // com display:block de antes — sem isso, "Sair" não parecia levar pra
+      // tela de login de verdade (o shell antigo continuava visível por cima).
+      const app = document.getElementById('qc-app');
+      if (app) app.style.display = 'none';
       telaLogin.style.display = 'flex';
       perfilAtual = null;
+      // Garante que o próximo login recarregue tudo do zero, sem resquício
+      // de aba/estado da sessão anterior.
+      if (window.location.hash) history.replaceState(null, '', window.location.pathname + window.location.search);
     }
   });
 
