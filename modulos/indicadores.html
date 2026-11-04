@@ -392,14 +392,18 @@
       popoverColunaAlvo = "";
     }
 
+    // Largura das colunas: global (um valor salvo no Firebase pra todo mundo
+    // que acessa o sistema), não mais uma preferência só do navegador.
     function mudarLarguraColunaMestre(novaLarg) {
-      localStorage.setItem('rg06_col_width', novaLarg);
+      dbEstrutura._colWidth = novaLarg;
+      localStorage.setItem('rg06_db_v6', JSON.stringify(dbEstrutura));
       document.documentElement.style.setProperty('--col-width', novaLarg + 'px');
       document.getElementById('lbl-largura-val').innerText = novaLarg + 'px';
     }
 
     function mudarLarguraColunaUnidade(novaLarg) {
-      localStorage.setItem('rg06_unit_col_width', novaLarg);
+      dbEstrutura._unitColWidth = novaLarg;
+      localStorage.setItem('rg06_db_v6', JSON.stringify(dbEstrutura));
       document.documentElement.style.setProperty('--unit-col-width', novaLarg + 'px');
       document.getElementById('lbl-largura-unidade-val').innerText = novaLarg + 'px';
     }
@@ -551,8 +555,8 @@
       const alvo = document.getElementById("painel-principal-conteudo");
       alvo.innerHTML = "";
 
-      let larguraSalva = localStorage.getItem('rg06_col_width') || "85";
-      let larguraUnidadeSalva = localStorage.getItem('rg06_unit_col_width') || "180";
+      let larguraSalva = dbEstrutura._colWidth || "85";
+      let larguraUnidadeSalva = dbEstrutura._unitColWidth || "180";
 
       Object.keys(dbEstrutura).forEach(k => {
         let dot = document.getElementById(`dot-${k}`);
@@ -1027,8 +1031,8 @@
         agendarSalvamentoFirestore();
       }
 
-      let baseWidth = localStorage.getItem('rg06_col_width') || "85";
-      let baseUnitWidth = localStorage.getItem('rg06_unit_col_width') || "180";
+      let baseWidth = dbEstrutura._colWidth || "85";
+      let baseUnitWidth = dbEstrutura._unitColWidth || "180";
       document.documentElement.style.setProperty('--col-width', baseWidth + 'px');
       document.documentElement.style.setProperty('--unit-col-width', baseUnitWidth + 'px');
 

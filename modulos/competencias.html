@@ -143,15 +143,6 @@
 
   <div id="carregando" style="position:fixed;inset:0;background:rgba(244,245,249,.95);display:flex;align-items:center;justify-content:center;color:#666;z-index:9000;">Carregando...</div>
 
-  <div class="module-controls-bar">
-    <div class="header-meta-vertical">
-      <div>Elaboração: <input type="text" id="iso-elab" value="03/04/23" onchange="salvarMeta('elab', this.value)"></div>
-      <div>Revisão: <input type="text" id="iso-rev" value="02/12/25" onchange="salvarMeta('rev', this.value)"></div>
-      <div>Versão/Nº: <input type="text" id="iso-num" value="01" onchange="salvarMeta('num', this.value)"></div>
-    </div>
-  </div>
-
-
   <div class="main-layout">
     <aside class="sidebar">
       <button class="nav-btn active" id="menu-btn-dashboard" onclick="trocarAba('dashboard')"><span>📊 Dashboard</span></button>
@@ -225,6 +216,10 @@
       if (!db.atestados) db.atestados = [];
       if (!db.instrutores) db.instrutores = construirInstrutoresSeed(db.processos);
       if (!db.meta) db.meta = { elab: '03/04/23', rev: '02/12/25', num: '01' };
+      // Largura das colunas: global (um valor só, salvo no Firebase e visto
+      // por todo mundo que loga), não mais por navegador/pessoa.
+      if (!db.colWidthLabel) db.colWidthLabel = 220;
+      if (!db.colWidthData) db.colWidthData = 100;
     }
     garantirEstruturaDB();
 
@@ -232,7 +227,6 @@
       localStorage.setItem('rg22_db_v1', JSON.stringify(db));
       if (window.salvarNoFirebase) window.salvarNoFirebase(db);
     }
-    function salvarMeta(campo, valor) { db.meta[campo] = valor; salvarDB(); }
 
     let abaAtiva = 'dashboard';
     let fichaFuncAtivo = null;
@@ -241,16 +235,28 @@
     let filtroFuncTexto = '', filtroFuncUnidade = '', filtroFuncStatus = 'Ativo';
     let filtroPendUnidade = '', filtroPendProcesso = '', filtroPendTipo = '';
 
-    // largura de colunas (compartilhada por todas as abas): coluna "identificadora" (nome/cargo/competência) e colunas de dados
-    let colWidthLabel = parseInt(localStorage.getItem('rg22_colw_label') || '220', 10);
-    let colWidthData = parseInt(localStorage.getItem('rg22_colw_data') || '100', 10);
+    // largura de colunas (compartilhada por todas as abas E por todo mundo
+    // que acessa o sistema — fica salva em db.colWidthLabel/db.colWidthData,
+    // que sincroniza com o Firebase igual o resto dos dados, não é mais só
+    // uma preferência local do navegador).
+    let colWidthLabel = db.colWidthLabel;
+    let colWidthData = db.colWidthData;
 
     function mudarLargura(tipo, v) {
       v = parseInt(v, 10);
-      if (tipo === 'label') { colWidthLabel = v; localStorage.setItem('rg22_colw_label', v); }
-      else { colWidthData = v; localStorage.setItem('rg22_colw_data', v); }
+      if (tipo === 'label') { colWidthLabel = v; db.colWidthLabel = v; }
+      else { colWidthData = v; db.colWidthData = v; }
+      salvarDB();
       renderTela();
     }
+
+    // Chamado pelo script do Firebase (módulo separado) quando os dados
+    // mudam em tempo real — por exemplo, quando outra pessoa logada ajustou
+    // a largura — pra manter essas duas variáveis locais em dia.
+    window.sincronizarLargurasColunas = function () {
+      colWidthLabel = db.colWidthLabel;
+      colWidthData = db.colWidthData;
+    };
 
     function controlesLargura() {
       return `
@@ -866,9 +872,6 @@
        INICIALIZAÇÃO
        ========================================================= */
     window.onload = function () {
-      if (db.meta.elab) document.getElementById('iso-elab').value = db.meta.elab;
-      if (db.meta.rev) document.getElementById('iso-rev').value = db.meta.rev;
-      if (db.meta.num) document.getElementById('iso-num').value = db.meta.num;
       renderTela();
     };
   </script>
@@ -905,11 +908,7 @@
           window.db = snap.data();
           window.garantirEstruturaDB();
           localStorage.setItem('rg22_db_v1', JSON.stringify(window.db));
-          if (window.db.meta) {
-            document.getElementById('iso-elab').value = window.db.meta.elab || '';
-            document.getElementById('iso-rev').value = window.db.meta.rev || '';
-            document.getElementById('iso-num').value = window.db.meta.num || '';
-          }
+          window.sincronizarLargurasColunas();
           window.renderTela();
         } else {
           // primeira vez que este módulo é usado: grava a carga inicial no Firebase
