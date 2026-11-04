@@ -1039,7 +1039,10 @@
       activeSlug: MODULO,
       pageTitle: 'RG 06 - Acompanhamento dos Indicadores de Monitoramento dos Processos',
       breadcrumb: 'Qualidade',
-      homeHref: '../index.html'
+      homeHref: '../index.html',
+      isoDocId: MODULO,
+      isoCollection: 'modulo_config',
+      isoEditLevel: 'qualidade'
     }).then(({ souQualidade }) => {
       if (!souQualidade) {
         document.body.classList.add('readonly-mode');
