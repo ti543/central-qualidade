@@ -8,7 +8,12 @@
 import { onAuthStateChanged, signOut, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { doc, getDoc, setDoc, collection, query, orderBy, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-export const LOGO_URL = "https://mirindosul.com.br/wp-content/themes/estrutura-basica/assets/images/logo.png";
+// Logo hospedada localmente (não mais buscada do site da empresa): o fetch()
+// usado pra gerar o PDF exige CORS, que o site não libera, então a logo
+// nunca aparecia no PDF. Hospedando aqui dentro do projeto, funciona sempre.
+// Resolvida a partir da localização deste próprio arquivo (import.meta.url),
+// assim funciona tanto chamada de web/index.html quanto de web/modulos/*.html.
+export const LOGO_URL = new URL('./img/logo-mirin.png', import.meta.url).href;
 
 /* Ícones por slug — ajuste/adicione conforme forem surgindo novos módulos.
    Qualquer slug sem entrada aqui cai no ícone padrão (bi-folder2). */

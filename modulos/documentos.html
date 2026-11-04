@@ -120,6 +120,44 @@
     .doc-meta-grid .k { font-size: 10px; color: #888; text-transform: uppercase; font-weight: bold; display: block; }
     .doc-meta-grid .val { font-size: 13px; font-weight: bold; color: #000050; display: block; }
 
+    /* CABEÇALHO OFICIAL — imita o cabeçalho usado nos documentos Word da
+       qualidade (logo à esquerda, título centralizado, caixa de
+       Elaboração/Revisão/N° revisão à direita), pra ficar igual tanto na
+       leitura quanto no PDF exportado. */
+    .doc-cabecalho-oficial {
+      display: flex; align-items: stretch; border: 1.5px solid #333; border-radius: 4px;
+      overflow: hidden; background: #fff; margin-bottom: 16px;
+    }
+    .doc-cab-logo {
+      flex: 0 0 150px; display: flex; align-items: center; justify-content: center;
+      padding: 8px 12px; border-right: 1.5px solid #333;
+    }
+    .doc-cab-logo img { max-width: 100%; max-height: 46px; object-fit: contain; display: block; }
+    .doc-cab-titulo {
+      flex: 1; display: flex; align-items: center; justify-content: center; text-align: center;
+      font-weight: 700; font-size: 14.5px; color: #000; padding: 8px 14px;
+      border-right: 1.5px solid #333; text-transform: uppercase; letter-spacing: .01em;
+    }
+    .doc-cab-info { border-collapse: collapse; flex: 0 0 210px; font-size: 11px; }
+    .doc-cab-info tr:not(:last-child) th, .doc-cab-info tr:not(:last-child) td { border-bottom: 1px solid #333; }
+    .doc-cab-info th, .doc-cab-info td { padding: 4px 9px; font-weight: normal; text-align: left; white-space: nowrap; }
+    .doc-cab-info th { font-weight: 700; }
+    .doc-cab-info td { text-align: right; font-weight: 700; color: #000050; width: 100%; }
+
+    /* TABELAS DO FIM DO DOCUMENTO — histórico de revisões e aprovação,
+       editáveis na ficha de edição e exibidas assim na leitura/PDF. */
+    .doc-tabela-fim { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 8px 0 18px; }
+    .doc-tabela-fim th { background: #eef2ff; color: #000050; text-align: left; padding: 7px 9px; font-size: 11px; text-transform: uppercase; border: 1px solid #ccc; }
+    .doc-tabela-fim td { padding: 6px 9px; border: 1px solid #ccc; vertical-align: top; }
+    .doc-form-lista-linha { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .doc-form-lista-linha > * { flex: 1; min-width: 0; }
+    .doc-form-lista-linha select { flex: 0 0 150px; }
+    .doc-form-lista-linha .doc-form-lista-remover {
+      flex: 0 0 auto; background: none; border: none; color: #9c0006; font-size: 17px; cursor: pointer; padding: 0 4px;
+    }
+    .doc-form-lista-add { font-size: 12px; padding: 6px 10px; }
+    .doc-aviso-lista-vazia { color: #888; font-size: 12px; margin: 0 0 8px; }
+
     .doc-conteudo-leitura {
       background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 18px;
       white-space: pre-wrap; font-size: 13.5px; line-height: 1.6; color: #333;
@@ -247,6 +285,8 @@
     let podeEditar = false;
     let perfilAtual = null;
     let docEmEdicaoId = null; // null = criando novo
+    let edicaoHistorico = []; // linhas editáveis de "histórico de revisões" na ficha de edição
+    let edicaoAprovacoes = []; // linhas editáveis de "aprovação do documento" na ficha de edição
 
     initLayout({
       auth, db,
@@ -386,6 +426,55 @@
       const n = parseInt(revisaoAtual, 10);
       const proximo = (isNaN(n) ? 0 : n) + 1;
       return String(proximo).padStart(2, '0');
+    }
+
+    // ---------------------------------------------------------------
+    // CABEÇALHO OFICIAL (logo + título + Elaboração/Revisão/N° revisão) —
+    // usado tanto na leitura em tela quanto no PDF exportado, pra ficar
+    // igual ao cabeçalho dos documentos Word da qualidade.
+    // ---------------------------------------------------------------
+    function renderCabecalhoOficial(d) {
+      return `
+        <div class="doc-cabecalho-oficial">
+          <div class="doc-cab-logo"><img src="${LOGO_URL}" alt="MirindoSul"></div>
+          <div class="doc-cab-titulo">${escapeHtml(d.codigo || '')} ${d.codigo ? '–' : ''} ${escapeHtml(d.titulo || '(sem título)')}</div>
+          <table class="doc-cab-info">
+            <tr><th>Elaboração:</th><td>${fmtDataBR(d.dataCriacao)}</td></tr>
+            <tr><th>Revisão:</th><td>${fmtDataBR(d.dataRevisao)}</td></tr>
+            <tr><th>N° revisão:</th><td>${escapeHtml(d.revisao || '00')}</td></tr>
+          </table>
+        </div>
+      `;
+    }
+
+    // ---------------------------------------------------------------
+    // TABELAS DO FIM DO DOCUMENTO — histórico de revisões (nº + o que
+    // mudou) e aprovação do documento (quem elaborou/aprovou). Editáveis
+    // na ficha de edição, exibidas assim na leitura e no PDF.
+    // ---------------------------------------------------------------
+    function renderTabelasFim(d) {
+      const historico = Array.isArray(d.historicoRevisoes) ? d.historicoRevisoes : [];
+      const aprovacoes = Array.isArray(d.aprovacoes) ? d.aprovacoes : [];
+      return `
+        <div class="qc-section-title" style="margin-top:22px;"><i class="bi bi-clock-history"></i> Histórico de revisões</div>
+        <table class="doc-tabela-fim">
+          <thead><tr><th style="width:90px;">Revisão</th><th>Descrição da alteração</th></tr></thead>
+          <tbody>
+            ${historico.length ? historico.map(h => `
+              <tr><td>${escapeHtml(h.revisao || '')}</td><td>${escapeHtml(h.descricao || '')}</td></tr>
+            `).join('') : `<tr><td colspan="2" style="color:#888;">Nenhuma revisão registrada.</td></tr>`}
+          </tbody>
+        </table>
+        <div class="qc-section-title"><i class="bi bi-person-check"></i> Aprovação do documento</div>
+        <table class="doc-tabela-fim">
+          <thead><tr><th style="width:170px;">Elaboração / revisão / aprovação</th><th>Nome</th><th>Função</th></tr></thead>
+          <tbody>
+            ${aprovacoes.length ? aprovacoes.map(a => `
+              <tr><td>${escapeHtml(a.papel || '')}</td><td>${escapeHtml(a.nome || '')}</td><td>${escapeHtml(a.funcao || '')}</td></tr>
+            `).join('') : `<tr><td colspan="3" style="color:#888;">Nenhuma aprovação registrada.</td></tr>`}
+          </tbody>
+        </table>
+      `;
     }
 
     // ---------------------------------------------------------------
@@ -690,17 +779,12 @@
       const ehHtml = d.conteudoFormato === 'html';
       const corpo = document.getElementById('doc-drawer-corpo');
       corpo.innerHTML = `
-        <div class="doc-meta-grid">
-          <div><span class="k">Código</span><span class="val">${escapeHtml(d.codigo || '')}</span></div>
-          <div><span class="k">Categoria</span><span class="val">${escapeHtml(d.categoria || '')}</span></div>
-          <div><span class="k">Revisão</span><span class="val">${escapeHtml(d.revisao || '—')}</span></div>
-          <div><span class="k">Data de criação</span><span class="val">${fmtDataBR(d.dataCriacao)}</span></div>
-          <div><span class="k">Data de revisão</span><span class="val">${fmtDataBR(d.dataRevisao)}</span></div>
-        </div>
+        ${renderCabecalhoOficial(d)}
         <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
           <button type="button" class="qc-btn" id="doc-btn-tela-cheia"><i class="bi bi-arrows-fullscreen"></i> Ler em tela cheia</button>
         </div>
         <div class="doc-conteudo-leitura${ehHtml ? ' is-html' : ''}">${renderizarConteudoParaLeitura(d.conteudo, d.conteudoFormato)}</div>
+        ${renderTabelasFim(d)}
         <div class="doc-form-rodape">
           <div>
             <label class="doc-copia-controlada-opcao"><input type="checkbox" id="doc-chk-copia-controlada"> Cópia controlada</label>
@@ -742,34 +826,15 @@
     }
 
     // ---------------------------------------------------------------
-    // EXPORTAÇÃO EM PDF — gerada inteiramente no navegador. O html2canvas
-    // "fotografa" o próprio conteúdo formatado (o mesmo HTML da leitura:
-    // negrito, cor, tabelas, imagens) e o jsPDF monta as páginas a partir
-    // disso — por isso o PDF sai igual ao que aparece na tela. Depois,
-    // escrevemos a logo, o número da página e (se marcado) "cópia
-    // controlada" em cada página.
+    // EXPORTAÇÃO EM PDF — gerada inteiramente no navegador. Em vez do
+    // pdf.html() (método antigo, frágil com HTML mais complexo — tabelas,
+    // cores, o editor Quill — e que às vezes saía com a página em branco),
+    // agora o html2canvas "fotografa" o bloco inteiro (cabeçalho oficial +
+    // conteúdo + tabelas do fim, exatamente o que aparece na leitura) numa
+    // única imagem comprida, que é fatiada em páginas A4 — por isso o PDF
+    // sai igual ao que está na tela. Por fim escrevemos o número da página
+    // e (se marcado) "cópia controlada" no rodapé de cada página.
     // ---------------------------------------------------------------
-    let logoParaPdfCache = null; // null = ainda não tentou, false = tentou e falhou (CORS/rede)
-
-    async function carregarLogoParaPdf() {
-      if (logoParaPdfCache !== null) return logoParaPdfCache;
-      try {
-        const resp = await fetch(LOGO_URL, { mode: 'cors' });
-        if (!resp.ok) throw new Error('status ' + resp.status);
-        const blob = await resp.blob();
-        logoParaPdfCache = await new Promise((resolve, reject) => {
-          const leitor = new FileReader();
-          leitor.onload = () => resolve(leitor.result);
-          leitor.onerror = reject;
-          leitor.readAsDataURL(blob);
-        });
-      } catch (err) {
-        console.warn('Não consegui carregar a logo pro cabeçalho do PDF (o site da logo pode não liberar CORS):', err);
-        logoParaPdfCache = false;
-      }
-      return logoParaPdfCache;
-    }
-
     async function exportarPdf(d) {
       if (!window.jspdf || !window.jspdf.jsPDF || !window.html2canvas) {
         alert('Não foi possível carregar o gerador de PDF agora. Verifique sua conexão e tente de novo.');
@@ -789,50 +854,62 @@
       const larguraPagina = pdf.internal.pageSize.getWidth();
       const alturaPagina = pdf.internal.pageSize.getHeight();
       const margemLateral = 40;
-      const margemSuperior = 85; // espaço reservado pra logo
-      const margemInferior = 50; // espaço reservado pro rodapé
+      const margemSuperior = 30;
+      const margemInferior = 46; // espaço reservado pro rodapé (nº de página / cópia controlada)
+      const alturaUtilPagina = alturaPagina - margemSuperior - margemInferior;
 
-      // Monta, fora da tela, o mesmo bloco de conteúdo exibido na leitura —
-      // mesmas classes CSS (doc-conteudo-leitura.is-html), então tabelas,
-      // negrito, cor e imagens saem exatamente como no sistema.
+      // Monta, fora da tela, o MESMO bloco exibido na leitura (cabeçalho
+      // oficial + conteúdo + histórico/aprovação) — mesmas classes CSS,
+      // então tabelas, negrito, cor e imagens saem exatamente como no
+      // sistema. "position:fixed; left:-9999px" mantém o bloco fora da
+      // vista mas totalmente renderizado (ao contrário de display:none ou
+      // visibility:hidden, que o html2canvas captura em branco).
       const ehHtml = d.conteudoFormato === 'html';
+      const largCaptura = 760; // largura do "papel" renderizado, em px CSS
       const container = document.createElement('div');
       container.style.position = 'fixed';
       container.style.left = '-9999px';
       container.style.top = '0';
-      container.style.width = '700px';
+      container.style.width = largCaptura + 'px';
       container.style.background = '#fff';
       container.style.boxSizing = 'border-box';
+      container.style.fontFamily = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
       container.innerHTML = `
-        <div style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
-          <h2 style="margin:0 0 4px;font-size:16px;color:#000080;">${escapeHtml(d.codigo || '')} — ${escapeHtml(d.titulo || '(sem título)')}</h2>
-          <p style="margin:0 0 16px;font-size:11px;color:#666;">Categoria: ${escapeHtml(d.categoria || '—')} &nbsp;&nbsp; Revisão: ${escapeHtml(d.revisao || '—')}</p>
-          <div class="doc-conteudo-leitura${ehHtml ? ' is-html' : ''}" style="border:none;padding:0;min-height:0;">
-            ${renderizarConteudoParaLeitura(d.conteudo, d.conteudoFormato)}
-          </div>
+        ${renderCabecalhoOficial(d)}
+        <div class="doc-conteudo-leitura${ehHtml ? ' is-html' : ''}">
+          ${renderizarConteudoParaLeitura(d.conteudo, d.conteudoFormato)}
         </div>
+        ${renderTabelasFim(d)}
       `;
       document.body.appendChild(container);
 
       try {
-        await carregarLogoParaPdf(); // carrega/cacheia antes (não é usado nesta etapa)
+        // Dá um respiro pro navegador terminar de montar o layout e decodificar
+        // imagens (base64 do Word, por exemplo) antes de tirar a "foto".
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-        await new Promise((resolve, reject) => {
-          try {
-            pdf.html(container, {
-              x: margemLateral,
-              y: margemSuperior,
-              width: larguraPagina - margemLateral * 2,
-              windowWidth: 700,
-              margin: [margemSuperior, margemLateral, margemInferior, margemLateral],
-              autoPaging: 'text',
-              html2canvas: { useCORS: true },
-              callback: () => resolve()
-            });
-          } catch (errSync) {
-            reject(errSync);
-          }
+        const escala = 2; // nitidez de impressão sem deixar o arquivo gigante
+        const canvas = await html2canvas(container, {
+          scale: escala,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          windowWidth: largCaptura
         });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.92);
+        const larguraConteudo = larguraPagina - margemLateral * 2;
+        const alturaConteudoTotal = canvas.height * larguraConteudo / canvas.width;
+
+        // A imagem comprida inteira é desenhada em todas as páginas,
+        // deslocada pra cima a cada uma — o PDF simplesmente não desenha
+        // o que passa dos limites da página, então cada página mostra só
+        // a fatia que cabe nela (mesma técnica usada em qualquer gerador
+        // de PDF "a partir de uma captura de tela" comprida).
+        const totalPaginas = Math.max(1, Math.ceil(alturaConteudoTotal / alturaUtilPagina));
+        for (let p = 0; p < totalPaginas; p++) {
+          if (p > 0) pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', margemLateral, margemSuperior - p * alturaUtilPagina, larguraConteudo, alturaConteudoTotal, undefined, 'FAST');
+        }
       } catch (err) {
         console.error('Erro ao gerar PDF:', err);
         alert('Não foi possível gerar o PDF agora.');
@@ -843,23 +920,18 @@
 
       container.remove();
 
-      // Cabeçalho (logo) e rodapé (nº de página / cópia controlada) em
-      // TODAS as páginas geradas.
-      const logo = await carregarLogoParaPdf();
-      const totalPaginas = pdf.internal.getNumberOfPages();
-      for (let p = 1; p <= totalPaginas; p++) {
+      // Rodapé (nº de página / cópia controlada) em TODAS as páginas geradas.
+      const totalPaginasFinal = pdf.internal.getNumberOfPages();
+      for (let p = 1; p <= totalPaginasFinal; p++) {
         pdf.setPage(p);
 
-        if (logo) {
-          try { pdf.addImage(logo, 'PNG', margemLateral, 18, 68, 26, undefined, 'FAST'); } catch (e) { /* ignora falha pontual de imagem */ }
-        }
         pdf.setDrawColor(210);
-        pdf.line(margemLateral, 54, larguraPagina - margemLateral, 54);
+        pdf.line(margemLateral, alturaPagina - margemInferior + 10, larguraPagina - margemLateral, alturaPagina - margemInferior + 10);
 
         pdf.setFont('helvetica', 'normal');
         pdf.setFontSize(9);
         pdf.setTextColor(120);
-        pdf.text(`Página ${p} de ${totalPaginas}`, larguraPagina - margemLateral, alturaPagina - 20, { align: 'right' });
+        pdf.text(`Página ${p} de ${totalPaginasFinal}`, larguraPagina - margemLateral, alturaPagina - 20, { align: 'right' });
 
         if (copiaControlada) {
           pdf.setFont('helvetica', 'bold');
@@ -912,6 +984,23 @@
       const categoriaAtual = d ? d.categoria : '';
       const categoriaEhPadrao = CATEGORIAS_PADRAO.includes(categoriaAtual);
 
+      // Histórico de revisões / aprovação — parte dos dados editáveis do
+      // documento, mas mantidos numa lista à parte (não são campos simples
+      // de input) por isso vivem em variáveis próprias enquanto a ficha de
+      // edição está aberta.
+      edicaoHistorico = (d && Array.isArray(d.historicoRevisoes)) ? d.historicoRevisoes.map(h => ({ ...h })) : [];
+      edicaoAprovacoes = (d && Array.isArray(d.aprovacoes)) ? d.aprovacoes.map(a => ({ ...a })) : [];
+      if (d) {
+        // Editar sempre cria uma nova revisão — já deixa uma linha pronta
+        // pra descrever o que mudou nela, se ainda não existir.
+        const proxRev = proximaRevisao(d.revisao);
+        if (!edicaoHistorico.some(h => h.revisao === proxRev)) {
+          edicaoHistorico.push({ revisao: proxRev, descricao: '' });
+        }
+      } else if (!edicaoHistorico.length) {
+        edicaoHistorico.push({ revisao: '01', descricao: 'Emissão inicial' });
+      }
+
       document.getElementById('doc-drawer-titulo').textContent = d ? 'Editar documento' : 'Novo documento';
       document.getElementById('doc-drawer-subtitulo').textContent = d
         ? `Salvar vai criar a revisão ${proximaRevisao(d.revisao)} e mover a revisão ${d.revisao || '—'} atual para o histórico.`
@@ -956,6 +1045,15 @@
           <label>Conteúdo do documento</label>
           <div id="doc-form-aviso-tabela"></div>
           <div id="doc-form-conteudo-editor"></div>
+
+          <div class="qc-section-title" style="margin-top:20px;"><i class="bi bi-clock-history"></i> Histórico de revisões</div>
+          <div id="doc-form-historico-lista"></div>
+          <button type="button" class="qc-btn doc-form-lista-add" id="doc-form-historico-add"><i class="bi bi-plus-lg"></i> Adicionar revisão</button>
+
+          <div class="qc-section-title" style="margin-top:20px;"><i class="bi bi-person-check"></i> Aprovação do documento</div>
+          <div id="doc-form-aprovacoes-lista"></div>
+          <button type="button" class="qc-btn doc-form-lista-add" id="doc-form-aprovacoes-add"><i class="bi bi-plus-lg"></i> Adicionar aprovador</button>
+
           <div class="doc-form-rodape">
             <button type="button" class="qc-btn" id="doc-form-cancelar">Cancelar</button>
             <button type="button" class="qc-btn qc-btn-primary" id="doc-form-salvar">Salvar</button>
@@ -968,9 +1066,83 @@
       });
       document.getElementById('doc-form-cancelar').addEventListener('click', () => (d ? abrirLeitura(id) : fecharDrawer()));
       document.getElementById('doc-form-salvar').addEventListener('click', () => salvarDocumento(id));
+      document.getElementById('doc-form-historico-add').addEventListener('click', () => {
+        edicaoHistorico.push({ revisao: d ? proximaRevisao(d.revisao) : '', descricao: '' });
+        renderListaHistorico();
+      });
+      document.getElementById('doc-form-aprovacoes-add').addEventListener('click', () => {
+        edicaoAprovacoes.push({ papel: 'Elaboração', nome: '', funcao: '' });
+        renderListaAprovacoes();
+      });
 
+      renderListaHistorico();
+      renderListaAprovacoes();
       montarEditorDeConteudo(d);
       abrirDrawer();
+    }
+
+    // ---------------------------------------------------------------
+    // LISTAS EDITÁVEIS — histórico de revisões / aprovação do documento.
+    // Mantidas em variáveis à parte (edicaoHistorico/edicaoAprovacoes) e
+    // redesenhadas a cada alteração, mesmo padrão usado em outros módulos
+    // do sistema (ex: lançamento em lote de competências).
+    // ---------------------------------------------------------------
+    function renderListaHistorico() {
+      const wrap = document.getElementById('doc-form-historico-lista');
+      if (!wrap) return;
+      wrap.innerHTML = edicaoHistorico.length ? edicaoHistorico.map((h, i) => `
+        <div class="doc-form-lista-linha">
+          <input type="text" data-campo="revisao" data-i="${i}" style="flex:0 0 70px;" placeholder="Rev." value="${escapeHtml(h.revisao || '')}">
+          <input type="text" data-campo="descricao" data-i="${i}" placeholder="O que mudou nessa revisão" value="${escapeHtml(h.descricao || '')}">
+          <button type="button" class="doc-form-lista-remover" data-remover-hist="${i}" title="Remover linha"><i class="bi bi-trash"></i></button>
+        </div>
+      `).join('') : `<p class="doc-aviso-lista-vazia">Nenhuma revisão registrada ainda.</p>`;
+
+      wrap.querySelectorAll('[data-campo]').forEach(el => {
+        el.addEventListener('input', (e) => {
+          const i = parseInt(e.target.dataset.i, 10);
+          edicaoHistorico[i][e.target.dataset.campo] = e.target.value;
+        });
+      });
+      wrap.querySelectorAll('[data-remover-hist]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const i = parseInt(e.currentTarget.dataset.removerHist, 10);
+          edicaoHistorico.splice(i, 1);
+          renderListaHistorico();
+        });
+      });
+    }
+
+    const PAPEIS_APROVACAO = ['Elaboração', 'Revisão', 'Aprovação'];
+
+    function renderListaAprovacoes() {
+      const wrap = document.getElementById('doc-form-aprovacoes-lista');
+      if (!wrap) return;
+      wrap.innerHTML = edicaoAprovacoes.length ? edicaoAprovacoes.map((a, i) => `
+        <div class="doc-form-lista-linha">
+          <select data-campo="papel" data-i="${i}">
+            ${PAPEIS_APROVACAO.map(p => `<option value="${escapeHtml(p)}" ${a.papel === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
+          </select>
+          <input type="text" data-campo="nome" data-i="${i}" placeholder="Nome" value="${escapeHtml(a.nome || '')}">
+          <input type="text" data-campo="funcao" data-i="${i}" placeholder="Função" value="${escapeHtml(a.funcao || '')}">
+          <button type="button" class="doc-form-lista-remover" data-remover-aprov="${i}" title="Remover linha"><i class="bi bi-trash"></i></button>
+        </div>
+      `).join('') : `<p class="doc-aviso-lista-vazia">Nenhuma aprovação registrada ainda.</p>`;
+
+      wrap.querySelectorAll('[data-campo]').forEach(el => {
+        const evento = el.tagName === 'SELECT' ? 'change' : 'input';
+        el.addEventListener(evento, (e) => {
+          const i = parseInt(e.target.dataset.i, 10);
+          edicaoAprovacoes[i][e.target.dataset.campo] = e.target.value;
+        });
+      });
+      wrap.querySelectorAll('[data-remover-aprov]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const i = parseInt(e.currentTarget.dataset.removerAprov, 10);
+          edicaoAprovacoes.splice(i, 1);
+          renderListaAprovacoes();
+        });
+      });
     }
 
     // ---------------------------------------------------------------
@@ -1050,6 +1222,10 @@
       const dataRevisao = document.getElementById('doc-form-data-revisao').value || hojeISO();
       const conteudoVazio = !quillEditor || quillEditor.getText().trim() === '';
       const conteudo = conteudoVazio ? '' : sanitizarHtml(quillEditor.root.innerHTML);
+      // Linhas totalmente em branco (usuário adicionou e não preencheu) não
+      // vão pro Firestore.
+      const historicoRevisoes = edicaoHistorico.filter(h => (h.revisao || '').trim() || (h.descricao || '').trim());
+      const aprovacoes = edicaoAprovacoes.filter(a => (a.nome || '').trim() || (a.funcao || '').trim());
 
       if (!categoria || !codigo || !titulo) {
         alert('Preencha ao menos categoria, código e título.');
@@ -1079,6 +1255,7 @@
             dataCriacao, dataRevisao,
             conteudoFormato: 'html',
             revisao: proximaRevisao(atual ? atual.revisao : '0'),
+            historicoRevisoes, aprovacoes,
             atualizadoEm: serverTimestamp(),
             atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
           });
@@ -1105,6 +1282,7 @@
               dataCriacao, dataRevisao,
               conteudoFormato: 'html',
               revisao: proximaRevisao(existente.revisao),
+              historicoRevisoes, aprovacoes,
               atualizadoEm: serverTimestamp(),
               atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
             });
@@ -1114,6 +1292,7 @@
               dataCriacao, dataRevisao,
               conteudoFormato: 'html',
               revisao: '01',
+              historicoRevisoes, aprovacoes,
               atualizadoEm: serverTimestamp(),
               atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
             });
@@ -1142,6 +1321,8 @@
       document.getElementById('doc-drawer').classList.remove('open', 'tela-cheia');
       docEmEdicaoId = null;
       quillEditor = null;
+      edicaoHistorico = [];
+      edicaoAprovacoes = [];
     }
   </script>
 </body>
