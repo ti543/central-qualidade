@@ -329,7 +329,12 @@
     const email = document.getElementById('novo-uid-email').value.trim();
     const unidade = document.getElementById('novo-uid-unidade').value.trim().toUpperCase();
     const papel = document.getElementById('novo-uid-papel').value;
-    const modulosMarcados = Array.from(document.querySelectorAll('#chk-modulos-novo input[type=checkbox]:checked')).map(c => c.value);
+    // Master sempre leva todos os módulos do catálogo atual (e o Firestore
+    // já libera tudo pra "qualidade" de qualquer forma); Administrativo leva
+    // só o que foi marcado manualmente.
+    const modulosMarcados = papel === 'qualidade'
+      ? modulosCache.map(m => m.slug)
+      : Array.from(document.querySelectorAll('#chk-modulos-novo input[type=checkbox]:checked')).map(c => c.value);
 
     if (!uid || !unidade) { alert('Preencha ao menos o UID e a unidade.'); return; }
 
@@ -381,15 +386,35 @@
 
   function renderizarChecklistNovoUsuario() {
     const container = document.getElementById('chk-modulos-novo');
+    const ehMaster = document.getElementById('novo-uid-papel').value === 'qualidade';
     container.innerHTML = modulosCache.map(m => `
-      <label><input type="checkbox" value="${escapeHtml(m.slug)}"> ${escapeHtml(m.nome)}</label>
+      <label title="${ehMaster ? 'Master já tem acesso a todos os módulos automaticamente' : ''}">
+        <input type="checkbox" value="${escapeHtml(m.slug)}" ${ehMaster ? 'checked disabled' : ''}> ${escapeHtml(m.nome)}
+      </label>
     `).join('');
   }
+
+  // Ao trocar o papel no cadastro de usuário novo: Master já marca (e trava)
+  // todos os módulos automaticamente; Administrativo volta tudo desmarcado
+  // pra qualidade escolher manualmente.
+  document.getElementById('novo-uid-papel').addEventListener('change', renderizarChecklistNovoUsuario);
 
   async function renderizarTabelaUsuarios() {
     const snap = await getDocs(collection(db, 'usuarios_perfil'));
     const usuarios = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
     const tbody = document.getElementById('tabela-usuarios');
+
+    // Pra Master, mostra todos os módulos já marcados (e travados) mesmo que
+    // o campo modulosPermitidos salvo no Firestore ainda não tenha todos —
+    // por exemplo quando um módulo novo foi criado depois dessa pessoa.
+    const chkModulosHtml = (u) => modulosCache.map(m => `
+      <label title="${u.papel === 'qualidade' ? 'Master já tem acesso a todos os módulos automaticamente' : ''}">
+        <input type="checkbox" class="campo-modulo" value="${escapeHtml(m.slug)}"
+          ${u.papel === 'qualidade' || (u.modulosPermitidos || []).includes(m.slug) ? 'checked' : ''}
+          ${u.papel === 'qualidade' ? 'disabled' : ''}>
+        ${escapeHtml(m.slug)}
+      </label>
+    `).join('');
 
     tbody.innerHTML = usuarios.map(u => `
       <tr data-uid="${escapeHtml(u.uid)}">
@@ -402,14 +427,7 @@
           </select>
         </td>
         <td>
-          <div class="chk-modulos">
-            ${modulosCache.map(m => `
-              <label>
-                <input type="checkbox" class="campo-modulo" value="${escapeHtml(m.slug)}" ${(u.modulosPermitidos || []).includes(m.slug) ? 'checked' : ''}>
-                ${escapeHtml(m.slug)}
-              </label>
-            `).join('')}
-          </div>
+          <div class="chk-modulos">${chkModulosHtml(u)}</div>
         </td>
         <td style="white-space:nowrap;">
           <button class="qc-btn qc-btn-primary" data-salvar-uid="${escapeHtml(u.uid)}">Salvar</button>
@@ -418,13 +436,28 @@
       </tr>
     `).join('');
 
+    // Trocar o papel na tabela já reflete na hora: Master marca e trava tudo,
+    // Administrativo libera as caixinhas pra qualidade escolher (começando
+    // vazio, já que esse usuário não tinha módulos próprios liberados).
+    tbody.querySelectorAll('.campo-papel').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const tr = sel.closest('tr');
+        const divModulos = tr.querySelector('.chk-modulos');
+        const u = usuarios.find(x => x.uid === tr.dataset.uid);
+        const papelNovo = sel.value;
+        divModulos.innerHTML = chkModulosHtml({ ...u, papel: papelNovo, modulosPermitidos: papelNovo === u.papel ? u.modulosPermitidos : [] });
+      });
+    });
+
     tbody.querySelectorAll('[data-salvar-uid]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const tr = btn.closest('tr');
         const uid = btn.dataset.salvarUid;
         const unidade = tr.querySelector('.campo-unidade').value.trim().toUpperCase();
         const papel = tr.querySelector('.campo-papel').value;
-        const modulosMarcados = Array.from(tr.querySelectorAll('.campo-modulo:checked')).map(c => c.value);
+        const modulosMarcados = papel === 'qualidade'
+          ? modulosCache.map(m => m.slug)
+          : Array.from(tr.querySelectorAll('.campo-modulo:checked')).map(c => c.value);
         await updateDoc(doc(db, 'usuarios_perfil', uid), { unidade, papel, modulosPermitidos: modulosMarcados });
         alert('Salvo!');
       });
