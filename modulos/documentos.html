@@ -371,6 +371,17 @@
         .toLowerCase();
     }
 
+    // Data de criação/revisão: editáveis à mão (igual no cabeçalho dos Word
+    // que a qualidade já usa), não é mais só um timestamp automático.
+    function hojeISO() {
+      return new Date().toISOString().slice(0, 10);
+    }
+    function fmtDataBR(iso) {
+      if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '—';
+      const [a, m, d] = iso.split('-');
+      return `${d}/${m}/${a}`;
+    }
+
     function proximaRevisao(revisaoAtual) {
       const n = parseInt(revisaoAtual, 10);
       const proximo = (isNaN(n) ? 0 : n) + 1;
@@ -683,6 +694,8 @@
           <div><span class="k">Código</span><span class="val">${escapeHtml(d.codigo || '')}</span></div>
           <div><span class="k">Categoria</span><span class="val">${escapeHtml(d.categoria || '')}</span></div>
           <div><span class="k">Revisão</span><span class="val">${escapeHtml(d.revisao || '—')}</span></div>
+          <div><span class="k">Data de criação</span><span class="val">${fmtDataBR(d.dataCriacao)}</span></div>
+          <div><span class="k">Data de revisão</span><span class="val">${fmtDataBR(d.dataRevisao)}</span></div>
         </div>
         <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
           <button type="button" class="qc-btn" id="doc-btn-tela-cheia"><i class="bi bi-arrows-fullscreen"></i> Ler em tela cheia</button>
@@ -692,18 +705,22 @@
           <div>
             <label class="doc-copia-controlada-opcao"><input type="checkbox" id="doc-chk-copia-controlada"> Cópia controlada</label>
             <button type="button" class="qc-btn" id="doc-btn-exportar-pdf"><i class="bi bi-file-earmark-pdf"></i> Exportar em PDF</button>
-            ${podeEditar ? `<button type="button" class="qc-btn" id="doc-btn-historico">Ver revisões anteriores</button>` : ''}
           </div>
           ${podeEditar ? `<button type="button" class="qc-btn qc-btn-primary" id="doc-btn-editar-do-drawer">Editar / nova revisão</button>` : ''}
         </div>
-        <div id="doc-historico-area"></div>
+        ${podeEditar ? `
+          <div class="qc-section-title" style="margin-top:18px;"><i class="bi bi-folder2-open"></i> Pasta de versões obsoletas</div>
+          <div id="doc-historico-area"><div class="doc-aviso-historico-vazio">Carregando histórico...</div></div>
+        ` : ''}
       `;
 
       document.getElementById('doc-btn-exportar-pdf').addEventListener('click', () => exportarPdf(d));
       document.getElementById('doc-btn-tela-cheia').addEventListener('click', alternarTelaCheia);
       if (podeEditar) {
         document.getElementById('doc-btn-editar-do-drawer').addEventListener('click', () => abrirEdicao(id));
-        document.getElementById('doc-btn-historico').addEventListener('click', () => carregarHistorico(id));
+        // A pasta de versões obsoletas já abre carregada — não precisa mais
+        // clicar num botão separado pra descobrir que ela existe.
+        carregarHistorico(id);
       }
 
       abrirDrawer();
@@ -926,6 +943,16 @@
               <input type="text" id="doc-form-titulo" value="${escapeHtml(d ? d.titulo : '')}">
             </div>
           </div>
+          <div class="doc-form-linha">
+            <div>
+              <label>Data de criação</label>
+              <input type="date" id="doc-form-data-criacao" value="${(d && d.dataCriacao) || hojeISO()}">
+            </div>
+            <div>
+              <label>Data de revisão</label>
+              <input type="date" id="doc-form-data-revisao" value="${(d && d.dataRevisao) || hojeISO()}">
+            </div>
+          </div>
           <label>Conteúdo do documento</label>
           <div id="doc-form-aviso-tabela"></div>
           <div id="doc-form-conteudo-editor"></div>
@@ -1021,6 +1048,8 @@
       const categoria = proximaCategoriaCustomOuPadrao(categoriaSelect, categoriaOutra);
       const codigo = document.getElementById('doc-form-codigo').value.trim();
       const titulo = document.getElementById('doc-form-titulo').value.trim();
+      const dataCriacao = document.getElementById('doc-form-data-criacao').value || hojeISO();
+      const dataRevisao = document.getElementById('doc-form-data-revisao').value || hojeISO();
       const conteudoVazio = !quillEditor || quillEditor.getText().trim() === '';
       const conteudo = conteudoVazio ? '' : sanitizarHtml(quillEditor.root.innerHTML);
 
@@ -1049,6 +1078,7 @@
 
           await updateDoc(docRef, {
             categoria, codigo, titulo, conteudo,
+            dataCriacao, dataRevisao,
             conteudoFormato: 'html',
             revisao: proximaRevisao(atual ? atual.revisao : '0'),
             atualizadoEm: serverTimestamp(),
@@ -1074,6 +1104,7 @@
             });
             await updateDoc(docRef, {
               categoria, codigo, titulo, conteudo,
+              dataCriacao, dataRevisao,
               conteudoFormato: 'html',
               revisao: proximaRevisao(existente.revisao),
               atualizadoEm: serverTimestamp(),
@@ -1082,6 +1113,7 @@
           } else {
             await setDoc(docRef, {
               categoria, codigo, titulo, conteudo,
+              dataCriacao, dataRevisao,
               conteudoFormato: 'html',
               revisao: '01',
               atualizadoEm: serverTimestamp(),
