@@ -382,10 +382,11 @@
       <div class="form-card">
         <h3>Cidades de região especial (ex: Oeste da RSL)</h3>
         <p style="font-size:13px; color:#666; margin-top:-8px; margin-bottom:14px;">
-          Algumas unidades marcam entregas pra certas cidades com uma região especial (ex: a RSL marca "OESTE"
+          Algumas unidades marcam baixas pra certas cidades com uma região especial (ex: a RSL marca "OESTE"
           pra Chapecó, Xanxerê e outras). Cadastre aqui as cidades de cada região — o cálculo marca a placa
-          automaticamente quando ela faz uma <strong>entrega</strong> pra uma dessas cidades (coleta não conta),
-          desde que a planilha semanal tenha a coluna "Cidade Entrega" mapeada no passo 2 do Lançar Semana.
+          automaticamente quando ela faz uma <strong>coleta</strong> (cidade remetente) ou uma <strong>entrega</strong>
+          (cidade entrega) pra uma dessas cidades, desde que a planilha semanal tenha a coluna "Cidade Remetente"
+          e/ou "Cidade Entrega" mapeada no passo 2 do Lançar Semana.
         </p>
         <div class="form-row col3">
           <div class="form-group">
@@ -1253,12 +1254,19 @@ async function salvarImportacao() {
   const btn = document.getElementById('btn-salvar-importacao');
   btn.disabled = true; btn.textContent = 'Salvando...';
   try {
+    // Não salva "eventos" (uma linha por baixa da planilha inteira) — ele só
+    // serve pra mostrar "X eventos lidos" na tela de revisão (antes de
+    // salvar) e não é usado em nenhuma tela depois. Guardar ele também no
+    // Firestore não ajuda em nada e, pra unidades com frota grande, pode
+    // empurrar o documento pra perto do limite de 1MB do Firestore — aí a
+    // gravação inteira falha (depois de já ter revisado e digitado os
+    // valores manuais da semana toda) sem nenhum aviso prévio de tamanho.
     await addDoc(collection(db, 'rv_importacoes'), {
       unidade: calculoAtual.unidade,
       periodoInicio: calculoAtual.periodoInicio,
       periodoFim: calculoAtual.periodoFim,
       nomeArquivo: calculoAtual.nomeArquivo,
-      eventos: calculoAtual.eventos,
+      totalEventosLidos: calculoAtual.eventos.length,
       resultadosPorPlaca: calculoAtual.resultadosPorPlaca,
       totaisPorRelacionamento: calculoAtual.totaisPorRelacionamento,
       totalGeral: calculoAtual.totalGeral,

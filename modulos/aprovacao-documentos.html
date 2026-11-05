@@ -204,7 +204,7 @@
 
     <script type="module">
         import { auth, db } from '../firebase-config.js';
-        import { doc, setDoc, updateDoc, collection, query, getDocs, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { doc, getDoc, setDoc, updateDoc, collection, query, getDocs, orderBy, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
         import { initLayout, escapeHtml } from '../assets/layout.js';
         // Upload de arquivo (Firebase Storage) desativado por enquanto — exige plano pago (Blaze).
 
@@ -229,24 +229,35 @@
             document.getElementById('data_elaboracao').value = new Date().toISOString().split('T')[0];
         }
 
-        async function gerarProximoNumeroSequencial() {
-            try {
-                const q = query(collection(db, "documentos_aprovacao"), orderBy("num_registro", "desc"));
-                const snap = await getDocs(q);
-                if (snap.empty) {
-                    return "001";
-                } else {
-                    let maiorNum = 0;
-                    snap.forEach(docSnap => {
-                        const numInt = parseInt(docSnap.data().num_registro, 10);
-                        if (!isNaN(numInt) && numInt > maiorNum) maiorNum = numInt;
-                    });
-                    return String(maiorNum + 1).padStart(3, '0');
-                }
-            } catch (error) {
-                console.error("Erro ao calcular próximo número: ", error);
-                return "001";
+        // Gera o número sequencial e grava o registro na MESMA transação sobre
+        // contadores/aprovacao-documentos — assim dois usuários salvando um
+        // registro novo quase ao mesmo tempo nunca saem com o mesmo número (o
+        // jeito antigo lia todos os registros e somava 1 no cliente, sem
+        // nenhuma proteção contra concorrência).
+        async function salvarNovoDocumentoComNumero(id, dadosSemNumero) {
+            const contadorRef = doc(db, 'contadores', 'aprovacao-documentos');
+            const novoDocRef = doc(db, 'documentos_aprovacao', id);
+
+            let semeadura = 0;
+            const contadorSnapFora = await getDoc(contadorRef);
+            if (!contadorSnapFora.exists()) {
+                const snap = await getDocs(query(collection(db, 'documentos_aprovacao'), orderBy('num_registro', 'desc')));
+                snap.forEach(d => {
+                    const n = parseInt(d.data().num_registro, 10);
+                    if (!isNaN(n) && n > semeadura) semeadura = n;
+                });
             }
+
+            let numeroFinal = '';
+            await runTransaction(db, async (transaction) => {
+                const contadorSnap = await transaction.get(contadorRef);
+                const ultimo = contadorSnap.exists() ? (contadorSnap.data().ultimoNumero || 0) : semeadura;
+                const novoNumero = ultimo + 1;
+                numeroFinal = String(novoNumero).padStart(3, '0');
+                transaction.set(contadorRef, { ultimoNumero: novoNumero });
+                transaction.set(novoDocRef, { ...dadosSemNumero, num_registro: numeroFinal });
+            });
+            return numeroFinal;
         }
 
         function badgeClassePorStatus(status) {
@@ -266,14 +277,11 @@
 
             let id = document.getElementById('doc-id').value;
             let numSeq = document.getElementById('num_registro').value;
-
-            if (!id) {
-                id = "DOC-" + Date.now();
-                numSeq = await gerarProximoNumeroSequencial();
-            }
+            const ehRegistroNovo = !id;
+            if (ehRegistroNovo) id = "DOC-" + Date.now();
 
             const dados = {
-                id, num_registro: numSeq,
+                id,
                 codigo_documento: document.getElementById('codigo_documento').value,
                 titulo_documento: document.getElementById('titulo_documento').value,
                 versao_revisao: document.getElementById('versao_revisao').value,
@@ -292,7 +300,11 @@
             };
 
             try {
-                await setDoc(doc(db, "documentos_aprovacao", id), dados);
+                if (ehRegistroNovo) {
+                    numSeq = await salvarNovoDocumentoComNumero(id, dados);
+                } else {
+                    await setDoc(doc(db, "documentos_aprovacao", id), { ...dados, num_registro: numSeq });
+                }
                 alert("Registro salvo com sucesso como Nº " + numSeq + "!");
                 limparFormulario();
                 carregarPainelControle();

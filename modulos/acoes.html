@@ -325,7 +325,7 @@
     <script type="module">
         import { auth, db } from '../firebase-config.js';
         import { signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-        import { doc, setDoc, collection, query, getDocs, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+        import { doc, getDoc, setDoc, collection, query, getDocs, orderBy, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
         import { initLayout, atualizarTopbar, escapeHtml } from '../assets/layout.js';
 
         let acoesCarregadas = [];
@@ -382,29 +382,41 @@
             corpoPlano.appendChild(tr);
         }
 
-        // CORREÇÃO E GARANTIA: SE DA BASE ESTIVER VAZIA, ADOTA ESTREITAMENTE "001"
-        async function gerarProximoNumeroSequencial() {
-            try {
-                const q = query(collection(db, "acoes_qualidade"), orderBy("num_registro", "desc"));
-                const snap = await getDocs(q);
-                if (snap.empty) {
-                    return "001";
-                } else {
-                    let maiorNum = 0;
-                    snap.forEach(doc => {
-                        const numStr = doc.data().num_registro;
-                        const numInt = parseInt(numStr, 10);
-                        if (!isNaN(numInt) && numInt > maiorNum) {
-                            maiorNum = numInt;
-                        }
-                    });
-                    const proximo = maiorNum + 1;
-                    return String(proximo).padStart(3, '0');
-                }
-            } catch (error) {
-                console.error("Erro ao calcular próximo número: ", error);
-                return "001";
+        // Gera o número sequencial e grava o registro na MESMA transação sobre
+        // contadores/acoes — igual já é feito no RG21/RG29. O jeito antigo (ler
+        // todos os registros, pegar o maior num_registro e somar 1 no cliente)
+        // não tinha nenhuma proteção contra dois usuários salvando um registro
+        // novo quase ao mesmo tempo: os dois podiam calcular o MESMO "próximo
+        // número" e gravar, cada um com seu id próprio (não haveria erro, só
+        // dois registros #042 diferentes na tabela).
+        async function salvarNovaAcaoComNumero(id, dadosSemNumero) {
+            const contadorRef = doc(db, 'contadores', 'acoes');
+            const novoDocRef = doc(db, 'acoes_qualidade', id);
+
+            // O contador pode não existir ainda (módulo já tinha registros
+            // salvos do jeito antigo, sem contador) — nesse caso, antes de
+            // abrir a transação, descobre o maior num_registro já usado pra
+            // não repetir um número que já existe.
+            let semeadura = 0;
+            const contadorSnapFora = await getDoc(contadorRef);
+            if (!contadorSnapFora.exists()) {
+                const snap = await getDocs(query(collection(db, 'acoes_qualidade'), orderBy('num_registro', 'desc')));
+                snap.forEach(d => {
+                    const n = parseInt(d.data().num_registro, 10);
+                    if (!isNaN(n) && n > semeadura) semeadura = n;
+                });
             }
+
+            let numeroFinal = '';
+            await runTransaction(db, async (transaction) => {
+                const contadorSnap = await transaction.get(contadorRef);
+                const ultimo = contadorSnap.exists() ? (contadorSnap.data().ultimoNumero || 0) : semeadura;
+                const novoNumero = ultimo + 1;
+                numeroFinal = String(novoNumero).padStart(3, '0');
+                transaction.set(contadorRef, { ultimoNumero: novoNumero });
+                transaction.set(novoDocRef, { ...dadosSemNumero, num_registro: numeroFinal });
+            });
+            return numeroFinal;
         }
 
         // ROTINA PARA EXCLUSÃO DE DOCUMENTOS
@@ -435,11 +447,8 @@
 
             let id = document.getElementById('doc-id').value;
             let numSeq = document.getElementById('num_registro').value;
-
-            if (!id) {
-                id = "AC-" + Date.now();
-                numSeq = await gerarProximoNumeroSequencial();
-            }
+            const ehRegistroNovo = !id;
+            if (ehRegistroNovo) id = "AC-" + Date.now();
 
             const plano_acao = [];
             corpoPlano.querySelectorAll('tr').forEach(row => {
@@ -452,7 +461,7 @@
             });
 
             const dados = {
-                id, num_registro: numSeq,
+                id,
                 processo: document.getElementById('processo').value,
                 data_abertura: document.getElementById('data_abertura').value,
                 status_acao: document.getElementById('status_acao').value,
@@ -493,7 +502,11 @@
             };
 
             try {
-                await setDoc(doc(db, "acoes_qualidade", id), dados);
+                if (ehRegistroNovo) {
+                    numSeq = await salvarNovaAcaoComNumero(id, dados);
+                } else {
+                    await setDoc(doc(db, "acoes_qualidade", id), { ...dados, num_registro: numSeq });
+                }
                 alert("Registro salvo com sucesso como Nº " + numSeq + "!");
                 limparFormulario();
                 carregarPainelControle();
@@ -517,19 +530,26 @@
             const corpo = document.getElementById('tabela-controle-corpo');
             corpo.innerHTML = "";
             dados.forEach(item => {
+                // Registros sem status_acao/data_abertura (ex: gravados fora do
+                // app, ou campo apagado sem querer) travavam a tabela INTEIRA
+                // com um erro no console — um só registro ruim deixava a tela
+                // em branco pra todo mundo. Agora cada um usa um valor padrão
+                // seguro em vez de quebrar o forEach inteiro.
+                const statusAcao = item.status_acao || '';
                 let bc = "bg-warning text-dark";
-                if(item.status_acao.includes("Eficaz")) bc = "bg-success text-white";
-                if(item.status_acao.includes("Ineficaz")) bc = "bg-danger text-white";
+                if(statusAcao.includes("Eficaz")) bc = "bg-success text-white";
+                if(statusAcao.includes("Ineficaz")) bc = "bg-danger text-white";
+                const dataAberturaBR = item.data_abertura ? item.data_abertura.split('-').reverse().join('/') : '—';
 
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td class="font-monospace fw-bold text-primary">#${item.num_registro || '---'}</td>
-                    <td>${item.data_abertura.split('-').reverse().join('/')}</td>
+                    <td>${dataAberturaBR}</td>
                     <td><span class="badge bg-secondary">${item.tipo_acao}</span></td>
                     <td>${item.processo}</td>
                     <td class="text-truncate" style="max-width: 260px;">${escapeHtml(item.descricao_problema)}</td>
                     <td>${escapeHtml(item.responsavel_geral)}</td>
-                    <td><span class="qc-status-badge ${bc}">${item.status_acao}</span></td>
+                    <td><span class="qc-status-badge ${bc}">${statusAcao || '—'}</span></td>
                     <td class="text-center">
                         <button class="btn btn-sm btn-primary btn-abrir" data-id="${item.id}" style="background:var(--qc-primary);border-color:var(--qc-primary);"><i class="bi bi-pencil-square"></i> Abrir</button>
                         <button class="btn btn-sm btn-outline-danger btn-excluir-tabela" data-id="${item.id}" data-num="${item.num_registro}"><i class="bi bi-trash"></i></button>
@@ -539,6 +559,14 @@
                 tr.querySelector('.btn-excluir-tabela').addEventListener('click', () => deletarRegistro(item.id, item.num_registro));
                 corpo.appendChild(tr);
             });
+        }
+
+        // Marca o rádio de nome "nome" cujo value bata com "valor" — sem quebrar
+        // se nenhum bater (registro antigo com um valor que não existe mais
+        // entre as opções atuais).
+        function marcarRadio(nome, valor) {
+            const el = document.querySelector(`input[name="${nome}"][value="${valor}"]`);
+            if (el) el.checked = true;
         }
 
         function abrirParaEdicao(id) {
@@ -557,8 +585,12 @@
             document.getElementById('abrangencia').value = item.abrangencia;
             document.getElementById('acao_imediata').value = item.acao_imediata || "";
 
-            document.querySelector(`input[name="tipo_acao"][value="${item.tipo_acao}"]`).checked = true;
-            document.querySelector(`input[name="origem_acao"][value="${item.origem_acao}"]`).checked = true;
+            // Se o valor salvo não bater com nenhuma opção de rádio atual
+            // (registro antigo, editado direto no Firestore, etc.), o
+            // querySelector some (retorna null) e o ".checked = true" quebrava
+            // o botão "Abrir" inteiro pra esse registro, sem aviso nenhum.
+            marcarRadio('tipo_acao', item.tipo_acao);
+            marcarRadio('origem_acao', item.origem_acao);
 
             if(item.causas_ishikawa) {
                 document.getElementById('m_mao_obra').value = item.causas_ishikawa.mao_obra || "";
@@ -584,8 +616,8 @@
                 adicionarLinhaPlano("", "", "", false);
             }
 
-            document.querySelector(`input[name="revisao_riscos"][value="${item.revisao_riscos}"]`).checked = true;
-            document.querySelector(`input[name="mudanca_sgq"][value="${item.mudanca_sgq}"]`).checked = true;
+            marcarRadio('revisao_riscos', item.revisao_riscos);
+            marcarRadio('mudanca_sgq', item.mudanca_sgq);
 
             if(item.eficacia) {
                 document.getElementById('data_verificacao').value = item.eficacia.data_verificacao || "";

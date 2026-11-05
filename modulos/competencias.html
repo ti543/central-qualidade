@@ -7,6 +7,11 @@
 <link rel="icon" href="../assets/icons/icon-192.png">
 <link rel="apple-touch-icon" href="../assets/icons/icon-192.png">
   <link href="../assets/layout.css" rel="stylesheet">
+  <!-- Gera o PDF do registro de treinamento (RG 24) inteiramente no navegador —
+       mesma técnica já usada na Biblioteca de Documentos: html2canvas "fotografa"
+       o bloco formatado e o jsPDF monta as páginas a partir disso. -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
     :root {
       --primary-color: #000080;
@@ -135,6 +140,32 @@
     .access-denied-card h2 { color: var(--danger-text); margin: 12px 0; }
     .access-denied-card button { margin-top: 16px; background: #6c757d; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; }
 
+    /* REGISTRO DE TREINAMENTO (RG 24) — bloco formatado só pra gerar o PDF,
+       nunca é mostrado na tela (fica fora da área visível, igual é feito na
+       Biblioteca de Documentos). Cabeçalho no mesmo padrão oficial (logo à
+       esquerda, título centralizado, Elaboração/Revisão/N° revisão à
+       direita) usado em todo documento impresso do sistema. */
+    .rgtr-cabecalho {
+      display: flex; align-items: stretch; border: 1.5px solid #333; border-radius: 4px;
+      overflow: hidden; background: #fff; margin-bottom: 14px;
+    }
+    .rgtr-cab-logo { flex: 0 0 150px; display: flex; align-items: center; justify-content: center; padding: 8px 12px; border-right: 1.5px solid #333; }
+    .rgtr-cab-logo img { max-width: 100%; max-height: 46px; object-fit: contain; display: block; }
+    .rgtr-cab-titulo { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 700; font-size: 14.5px; color: #000; padding: 8px 14px; border-right: 1.5px solid #333; text-transform: uppercase; letter-spacing: .01em; }
+    .rgtr-cab-info { border-collapse: collapse; flex: 0 0 210px; font-size: 11px; }
+    .rgtr-cab-info tr:not(:last-child) th, .rgtr-cab-info tr:not(:last-child) td { border-bottom: 1px solid #333; }
+    .rgtr-cab-info th, .rgtr-cab-info td { padding: 4px 9px; font-weight: normal; text-align: left; white-space: nowrap; }
+    .rgtr-cab-info th { font-weight: 700; }
+    .rgtr-cab-info td { text-align: right; font-weight: 700; color: #000050; width: 100%; }
+
+    .rgtr-info-treino { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 12.5px; }
+    .rgtr-info-treino td { border: 1px solid #333; padding: 6px 10px; }
+
+    .rgtr-lista { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .rgtr-lista th, .rgtr-lista td { border: 1px solid #333; padding: 7px 10px; text-align: left; }
+    .rgtr-lista th { background: #eef2ff; font-weight: 700; text-transform: uppercase; font-size: 11px; }
+    .rgtr-lista td.rgtr-col-assinatura { height: 30px; }
+
   </style>
 </head>
 <body class="qc-body">
@@ -224,9 +255,21 @@
     }
     garantirEstruturaDB();
 
+    // salvarDB() é chamado em ~17 lugares diferentes (qualquer edição — uma
+    // data de treinamento, um checkbox, até redimensionar coluna). Sem o
+    // debounce abaixo, CADA clique virava uma gravação completa do documento
+    // inteiro no Firebase na hora — se duas pessoas de unidades diferentes
+    // estivessem editando ao mesmo tempo, a segunda gravação podia sobrescrever
+    // uma mudança da primeira que ainda não tinha "viajado" até o Firebase e
+    // voltado. O debounce agrupa edições em sequência numa gravação só,
+    // encolhendo bastante essa janela de risco.
+    let _salvarDBTimeout = null;
     function salvarDB() {
       localStorage.setItem('rg22_db_v1', JSON.stringify(db));
-      if (window.salvarNoFirebase) window.salvarNoFirebase(db);
+      clearTimeout(_salvarDBTimeout);
+      _salvarDBTimeout = setTimeout(() => {
+        if (window.salvarNoFirebase) window.salvarNoFirebase(db);
+      }, 600);
     }
 
     let abaAtiva = 'dashboard';
@@ -242,6 +285,7 @@
     let loteFuncUnidade = '';
     let loteFuncTexto = '';
     let loteSelecionados = new Set();
+    let loteLocalTreinamento = 'Empresa'; // só usado no cabeçalho do registro de treinamento (RG 24) gerado em PDF
 
     // largura de colunas (compartilhada por todas as abas E por todo mundo
     // que acessa o sistema — fica salva em db.colWidthLabel/db.colWidthData,
@@ -678,6 +722,12 @@
           </div>
 
           <div class="filter-bar">
+            <input type="text" placeholder="Local do treinamento (ex: Empresa)" value="${escapeHtmlRgtr(loteLocalTreinamento)}" oninput="loteLocalTreinamento=this.value;" style="max-width:260px;">
+            <button class="btn-action" id="btn-gerar-registro-treinamento" onclick="gerarRegistroTreinamento()">🖨️ Gerar registro de treinamento (RG 24)</button>
+            <span style="font-size:11px; color:#888;">Gera em PDF a lista de presença/assinatura da competência escolhida acima, já com os nomes de quem está marcado na tabela (ou de todo mundo filtrado, se ninguém estiver marcado).</span>
+          </div>
+
+          <div class="filter-bar">
             <input type="text" placeholder="Buscar por nome ou função..." value="${loteFuncTexto}" oninput="loteFuncTexto=this.value; renderTela();">
             <select onchange="loteFuncUnidade=this.value; renderTela();">
               <option value="">Todas as unidades</option>
@@ -697,6 +747,178 @@
           </div>
         </div>
       `;
+    }
+
+    // ---------------------------------------------------------------
+    // REGISTRO DE TREINAMENTO (RG 24) — gera em PDF, no mesmo padrão oficial
+    // já usado na Biblioteca de Documentos, a lista de presença/assinatura
+    // da competência escolhida na aba "Lançamento em Lote": nome de cada
+    // funcionário já preenchido na primeira coluna, assinatura em branco do
+    // lado — igual ao RG 24 físico que a qualidade já usa, só que sem
+    // precisar digitar os nomes um por um no Word.
+    // ---------------------------------------------------------------
+    function escapeHtmlRgtr(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    async function gerarRegistroTreinamento() {
+      if (loteProcIdx === '') { alert('Escolha a competência/treinamento primeiro (campo no topo desta aba).'); return; }
+
+      const procIdx = parseInt(loteProcIdx, 10);
+      // Usa quem estiver marcado na lista (mesma seleção usada em "Aplicar data
+      // aos selecionados"); se ninguém estiver marcado ainda, usa todo mundo que
+      // aparece com os filtros de busca/unidade aplicados agora.
+      const participantes = (loteSelecionados.size > 0
+        ? db.funcionarios.filter(f => loteSelecionados.has(f.id))
+        : loteListaFiltrada()
+      ).slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+      if (!participantes.length) {
+        alert('Não há funcionário nenhum pra incluir no registro. Marque ao menos um na lista (ou ajuste os filtros de busca/unidade).');
+        return;
+      }
+      if (!window.jspdf || !window.jspdf.jsPDF || !window.html2canvas) {
+        alert('Não foi possível carregar o gerador de PDF agora. Verifique sua conexão e tente de novo.');
+        return;
+      }
+
+      const btn = document.getElementById('btn-gerar-registro-treinamento');
+      const textoOriginalBtn = btn ? btn.innerHTML : '';
+      if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Gerando PDF...'; }
+
+      const nomeTreinamento = db.processos[procIdx] || '';
+      const inst = (db.instrutores && db.instrutores[procIdx]) || {};
+      const dataTreinamentoBR = loteData ? fmtBR(loteData) : '';
+      const logoSrc = document.querySelector('.qc-sidebar-logo img')?.src || '';
+
+      const linhasTabela = participantes.map(f => `
+        <tr><td>${escapeHtmlRgtr(f.nome)}</td><td class="rgtr-col-assinatura"></td></tr>
+      `).join('');
+
+      const container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.width = '760px';
+      container.style.background = '#fff';
+      container.style.boxSizing = 'border-box';
+      container.style.padding = '0';
+      container.style.fontFamily = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+      container.innerHTML = `
+        <div class="rgtr-cabecalho">
+          <div class="rgtr-cab-logo">${logoSrc ? `<img src="${logoSrc}" alt="MirindoSul">` : ''}</div>
+          <div class="rgtr-cab-titulo">RG 24 – Registro de treinamento</div>
+          <table class="rgtr-cab-info">
+            <tr><th>Elaboração:</th><td>${escapeHtmlRgtr(db.meta?.elab || '')}</td></tr>
+            <tr><th>Revisão:</th><td>${escapeHtmlRgtr(db.meta?.rev || '')}</td></tr>
+            <tr><th>N° revisão:</th><td>${escapeHtmlRgtr(db.meta?.num || '')}</td></tr>
+          </table>
+        </div>
+        <table class="rgtr-info-treino">
+          <tr><td colspan="2"><strong>Treinamento:</strong> ${escapeHtmlRgtr(nomeTreinamento)}</td></tr>
+          <tr>
+            <td style="width:50%;"><strong>Carga horária:</strong> ${escapeHtmlRgtr(inst.horasTreinamento || '') ? `${escapeHtmlRgtr(inst.horasTreinamento)} hora(s)` : ''}</td>
+            <td><strong>Data da realização:</strong> ${escapeHtmlRgtr(dataTreinamentoBR)}</td>
+          </tr>
+          <tr>
+            <td><strong>Instrutor(es):</strong> ${escapeHtmlRgtr(inst.instrutor || '')}</td>
+            <td><strong>Local:</strong> ${escapeHtmlRgtr(loteLocalTreinamento || 'Empresa')}</td>
+          </tr>
+        </table>
+        <table class="rgtr-lista">
+          <thead><tr><th style="width:62%;">Nome</th><th>Assinatura</th></tr></thead>
+          <tbody>${linhasTabela}</tbody>
+        </table>
+      `;
+      document.body.appendChild(container);
+
+      try {
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+        const larguraPagina = pdf.internal.pageSize.getWidth();
+        const alturaPagina = pdf.internal.pageSize.getHeight();
+        const margemLateral = 40;
+        const margemSuperior = 30;
+        const margemInferior = 46;
+        const alturaUtilPagina = alturaPagina - margemSuperior - margemInferior;
+
+        const escala = 2;
+        const canvas = await html2canvas(container, { scale: escala, useCORS: true, backgroundColor: '#ffffff', windowWidth: 760 });
+
+        const larguraConteudo = larguraPagina - margemLateral * 2;
+        const ptPorPx = larguraConteudo / canvas.width;
+        const alturaUtilPaginaPx = Math.floor(alturaUtilPagina / ptPorPx);
+
+        // Mesma técnica de corte "em linha branca" usada na Biblioteca de
+        // Documentos: procura, perto do fim ideal da página, uma linha sem
+        // nenhum pixel escuro (um espaço entre linhas da tabela) pra nunca
+        // cortar um nome ou uma linha de assinatura ao meio.
+        const ctxCanvas = canvas.getContext('2d');
+        const larguraCanvas = canvas.width;
+        const amostraPasso = Math.max(1, Math.floor(larguraCanvas / 48));
+        function acharLinhaEmBranco(bandTopPx, bandAlturaPx) {
+          if (bandAlturaPx <= 0) return -1;
+          const dados = ctxCanvas.getImageData(0, bandTopPx, larguraCanvas, bandAlturaPx).data;
+          for (let linha = bandAlturaPx - 1; linha >= 0; linha--) {
+            let emBranco = true;
+            const offsetLinha = linha * larguraCanvas * 4;
+            for (let x = 0; x < larguraCanvas; x += amostraPasso) {
+              const idx = offsetLinha + x * 4;
+              if (dados[idx] < 245 || dados[idx + 1] < 245 || dados[idx + 2] < 245) { emBranco = false; break; }
+            }
+            if (emBranco) return bandTopPx + linha;
+          }
+          return -1;
+        }
+
+        let cursorPx = 0;
+        while (cursorPx < canvas.height) {
+          const fimIdealPx = Math.min(cursorPx + alturaUtilPaginaPx, canvas.height);
+          let fimPx = fimIdealPx;
+          if (fimIdealPx < canvas.height) {
+            const minimoNestaPagina = Math.floor(alturaUtilPaginaPx * 0.55);
+            const bandTopPx = cursorPx + minimoNestaPagina;
+            const linhaEmBranco = acharLinhaEmBranco(bandTopPx, fimIdealPx - bandTopPx);
+            if (linhaEmBranco >= 0) fimPx = linhaEmBranco;
+          }
+          const alturaFatiaPx = fimPx - cursorPx;
+          if (alturaFatiaPx <= 0) break;
+          if (cursorPx > 0) pdf.addPage();
+
+          const fatia = document.createElement('canvas');
+          fatia.width = canvas.width;
+          fatia.height = alturaFatiaPx;
+          fatia.getContext('2d').drawImage(canvas, 0, cursorPx, canvas.width, alturaFatiaPx, 0, 0, canvas.width, alturaFatiaPx);
+
+          const alturaFatiaPt = alturaFatiaPx * ptPorPx;
+          pdf.addImage(fatia.toDataURL('image/jpeg', 0.92), 'JPEG', margemLateral, margemSuperior, larguraConteudo, alturaFatiaPt, undefined, 'FAST');
+
+          cursorPx = fimPx;
+        }
+
+        const totalPaginas = pdf.internal.getNumberOfPages();
+        for (let p = 1; p <= totalPaginas; p++) {
+          pdf.setPage(p);
+          pdf.setDrawColor(210);
+          pdf.line(margemLateral, alturaPagina - margemInferior + 10, larguraPagina - margemLateral, alturaPagina - margemInferior + 10);
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(9);
+          pdf.setTextColor(120);
+          pdf.text(`Página ${p} de ${totalPaginas}`, larguraPagina - margemLateral, alturaPagina - 20, { align: 'right' });
+          pdf.setTextColor(0);
+        }
+
+        const nomeArquivo = `RG 24 - Registro de treinamento - ${nomeTreinamento}${loteData ? ' ' + loteData : ''}.pdf`.replace(/[\\/:*?"<>|]+/g, '-');
+        pdf.save(nomeArquivo);
+      } catch (err) {
+        console.error('Erro ao gerar registro de treinamento:', err);
+        alert('Não foi possível gerar o PDF agora.');
+      } finally {
+        container.remove();
+        if (btn) { btn.disabled = false; btn.innerHTML = textoOriginalBtn; }
+      }
     }
 
     function abrirFicha(funcId) {
@@ -1012,7 +1234,13 @@
       document.getElementById('carregando').style.display = 'none';
 
       window.salvarNoFirebase = function (dbObj) {
-        setDoc(dbDocRef, dbObj).catch(err => console.error('Erro ao salvar no Firebase:', err));
+        // merge:true não resolve sozinho duas pessoas editando ao mesmo tempo
+        // (o objeto inteiro é reenviado a cada gravação), mas evita o caso mais
+        // simples de perder dados: alguém com a aba aberta há um tempo, cujo
+        // "db" em memória não tem um campo novo que só passou a existir depois
+        // (ex: adicionado por uma atualização do sistema), gravando por cima
+        // sem apagar esse campo que não conhece.
+        setDoc(dbDocRef, dbObj, { merge: true }).catch(err => console.error('Erro ao salvar no Firebase:', err));
       };
 
       if (firestoreUnsub) firestoreUnsub();

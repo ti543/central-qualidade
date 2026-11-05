@@ -691,16 +691,25 @@
             });
           }
 
-          await setDoc(docRef, {
+          // { merge: true } é importante aqui: sem isso, o setDoc troca o
+          // documento INTEIRO pelo que vier abaixo — e como esse payload não
+          // tem dataCriacao/dataRevisao, reimportar uma revisão nova do Word
+          // apagava essas datas se alguém já tivesse preenchido elas na tela
+          // de edição antes. Com merge, só os campos abaixo são tocados; os
+          // demais (como dataCriacao) continuam como estavam.
+          const payload = {
             categoria: c.categoria,
             codigo: c.codigo,
             titulo: c.titulo,
             conteudo: c.conteudo,
             conteudoFormato: c.conteudoFormato || 'html',
             revisao: revisaoFinal,
+            dataRevisao: hojeISO(),
             atualizadoEm: serverTimestamp(),
             atualizadoPor: (perfilAtual && perfilAtual.unidade) || ''
-          });
+          };
+          if (!existente) payload.dataCriacao = hojeISO();
+          await setDoc(docRef, payload, { merge: true });
 
           ok++;
         } catch (err) {
@@ -832,10 +841,15 @@
       container.style.fontFamily = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
       container.innerHTML = `
         ${renderCabecalhoOficial(d)}
-        <div class="doc-conteudo-leitura${ehHtml ? ' is-html' : ''}">
+        <div class="doc-conteudo-leitura${ehHtml ? ' is-html' : ''}" style="border:none; border-radius:0; padding:0;">
           ${renderizarConteudoParaLeitura(d.conteudo, d.conteudoFormato)}
         </div>
       `;
+      // A classe ".doc-conteudo-leitura" tem uma borda e cantos arredondados —
+      // é o "cartão" usado pra destacar a área de leitura NA TELA. Sem o style
+      // acima pra anular isso, essa borda ia junto na "foto" do html2canvas e
+      // aparecia no PDF como um risco cortando cada página (um documento oficial
+      // impresso não deve ter essa moldura).
       document.body.appendChild(container);
 
       try {
@@ -858,29 +872,67 @@
         // Quantos pixels do canvas cabem na área útil de uma página.
         const alturaUtilPaginaPx = Math.floor(alturaUtilPagina / ptPorPx);
 
+        // Procura, dentro da "banda" [bandTopPx, fimIdealPx), a linha mais
+        // baixa (mais perto do fim ideal) que esteja inteiramente em branco —
+        // ou seja, um espaço entre parágrafos/linhas/linhas de tabela, nunca
+        // no meio de uma. Sem isso, o corte caía exatamente no meio de uma
+        // linha de texto (ou de uma linha de tabela), cortando ela na metade
+        // entre uma página e outra — ficava feio e, se a linha cortada era a
+        // última da página, parecia "entrar" por baixo do rodapé.
+        const ctxCanvas = canvas.getContext('2d');
+        const larguraCanvas = canvas.width;
+        const amostraPasso = Math.max(1, Math.floor(larguraCanvas / 48));
+        function acharLinhaEmBranco(bandTopPx, bandAlturaPx) {
+          if (bandAlturaPx <= 0) return -1;
+          const dados = ctxCanvas.getImageData(0, bandTopPx, larguraCanvas, bandAlturaPx).data;
+          for (let linha = bandAlturaPx - 1; linha >= 0; linha--) {
+            let emBranco = true;
+            const offsetLinha = linha * larguraCanvas * 4;
+            for (let x = 0; x < larguraCanvas; x += amostraPasso) {
+              const idx = offsetLinha + x * 4;
+              if (dados[idx] < 245 || dados[idx + 1] < 245 || dados[idx + 2] < 245) { emBranco = false; break; }
+            }
+            if (emBranco) return bandTopPx + linha;
+          }
+          return -1;
+        }
+
         // Em vez de desenhar a imagem inteira em cada página deslocada
         // (técnica que, sem clipar a sobra, repetia um pedaço do conteúdo
         // de uma página pra outra), cada página recorta sua PRÓPRIA fatia
         // do canvas original pra um canvas novo — sem overlap possível,
         // cada pixel do documento aparece em uma página só.
-        const totalPaginas = Math.max(1, Math.ceil(canvas.height / alturaUtilPaginaPx));
-        for (let p = 0; p < totalPaginas; p++) {
-          if (p > 0) pdf.addPage();
+        let cursorPx = 0;
+        while (cursorPx < canvas.height) {
+          const fimIdealPx = Math.min(cursorPx + alturaUtilPaginaPx, canvas.height);
+          let fimPx = fimIdealPx;
+          if (fimIdealPx < canvas.height) {
+            // só aceita um corte "em branco" se ele ainda deixar pelo menos
+            // 55% da página preenchido — senão a página anterior sai curta
+            // demais e o conteúdo "sobra" todo pra depois.
+            const minimoNestaPagina = Math.floor(alturaUtilPaginaPx * 0.55);
+            const bandTopPx = cursorPx + minimoNestaPagina;
+            const linhaEmBranco = acharLinhaEmBranco(bandTopPx, fimIdealPx - bandTopPx);
+            if (linhaEmBranco >= 0) fimPx = linhaEmBranco;
+          }
 
-          const inicioPx = p * alturaUtilPaginaPx;
-          const alturaFatiaPx = Math.min(alturaUtilPaginaPx, canvas.height - inicioPx);
-          if (alturaFatiaPx <= 0) continue;
+          const alturaFatiaPx = fimPx - cursorPx;
+          if (alturaFatiaPx <= 0) break;
+
+          if (cursorPx > 0) pdf.addPage();
 
           const fatia = document.createElement('canvas');
           fatia.width = canvas.width;
           fatia.height = alturaFatiaPx;
           fatia.getContext('2d').drawImage(
-            canvas, 0, inicioPx, canvas.width, alturaFatiaPx,
+            canvas, 0, cursorPx, canvas.width, alturaFatiaPx,
             0, 0, canvas.width, alturaFatiaPx
           );
 
           const alturaFatiaPt = alturaFatiaPx * ptPorPx;
           pdf.addImage(fatia.toDataURL('image/jpeg', 0.92), 'JPEG', margemLateral, margemSuperior, larguraConteudo, alturaFatiaPt, undefined, 'FAST');
+
+          cursorPx = fimPx;
         }
       } catch (err) {
         console.error('Erro ao gerar PDF:', err);

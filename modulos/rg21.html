@@ -846,7 +846,7 @@
       'Responsável pela solução': item.responsavel || '',
       'Houve contato com o cliente': item.contato === 'sim' ? 'Sim' : (item.contato === 'nao' ? 'Não' : ''),
       'Com ou sem ressalva': item.ressalva === 'com' ? 'Com ressalva' : (item.ressalva === 'sem' ? 'Sem ressalva' : ''),
-      'Ação corretiva': ''
+      'Ação corretiva': item.acaoCorretivaNumero ? `Nº ${item.acaoCorretivaNumero}${item.acaoCorretivaDescricao ? ' — ' + item.acaoCorretivaDescricao : ''}` : ''
     }));
 
     const planilha = XLSX.utils.json_to_sheet(linhas);

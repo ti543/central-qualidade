@@ -775,7 +775,7 @@
       'Data da solução': o.dataSolucao ? formatarDataBr(o.dataSolucao) : '',
       'Dias para solução': calcularDiasSolucao(o.data, o.dataSolucao),
       'Responsável pela solução': o.responsavel || '',
-      'Ação corretiva': '',
+      'Ação corretiva': o.acaoCorretivaNumero ? `Nº ${o.acaoCorretivaNumero}${o.acaoCorretivaDescricao ? ' — ' + o.acaoCorretivaDescricao : ''}` : '',
       'Com ou sem ressalva': o.ressalva === 'com' ? 'Com ressalva' : (o.ressalva === 'sem' ? 'Sem ressalva' : '')
     }));
 

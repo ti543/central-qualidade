@@ -193,7 +193,7 @@
       if (!firestoreDocRef) return;
       clearTimeout(timeoutSalvarFirestore);
       timeoutSalvarFirestore = setTimeout(() => {
-        window.__firestoreSetDoc(firestoreDocRef, dbEstrutura).catch(err => console.error('Erro ao salvar indicadores no Firebase:', err));
+        window.__firestoreSetDoc(firestoreDocRef, dbEstrutura, { merge: true }).catch(err => console.error('Erro ao salvar indicadores no Firebase:', err));
       }, 400);
     }
     const _origSetItem = localStorage.setItem.bind(localStorage);
