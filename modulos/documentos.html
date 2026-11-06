@@ -11,6 +11,10 @@
   <!-- Lê o .docx inteiro no navegador (nada é enviado pra nenhum servidor além
        do conteúdo extraído, que vai pro Firestore igual a edição manual). -->
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.13.0/mammoth.browser.min.js"></script>
+  <!-- Só pra ler/alterar o .docx original ANTES de passar pro mammoth —
+       serve pra achar as quebras de página manuais do Word (o mammoth
+       sozinho ignora elas, ver prepararDocxComMarcadoresDePagina). -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <!-- Gera o PDF de exportação inteiramente no navegador — html2canvas "fotografa"
        o conteúdo formatado (negrito, cor, tabelas, imagens) e o jsPDF monta as
        páginas a partir disso, pra o PDF sair igual ao que aparece na leitura. -->
@@ -145,7 +149,13 @@
     .doc-cab-info td { text-align: right; font-weight: 700; color: #000050; width: 100%; }
 
     .doc-conteudo-leitura {
-      background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 18px;
+      /* Sem borda/moldura ao redor do texto (pedido do usuário, mais de uma
+         vez) — só o espaçamento interno pra não ficar colado nas bordas da
+         tela nem do PDF. Antes tinha "border" + "border-radius" aqui; isso
+         saía tanto na tela quanto, sem o style inline de exportarPdf(),
+         no PDF — removendo direto na classe-base elimina os dois casos de
+         vez, em vez de depender só do override do PDF. */
+      background: #fff; padding: 18px;
       white-space: pre-wrap; font-size: 13.5px; line-height: 1.6; color: #333;
       min-height: 120px;
     }
@@ -154,7 +164,11 @@
        já vem das próprias tags, não precisamos do pre-wrap. */
     .doc-conteudo-leitura.is-html { white-space: normal; }
     .doc-conteudo-leitura.is-html p, .doc-conteudo-leitura.is-html ul, .doc-conteudo-leitura.is-html ol { margin: 0 0 10px; }
-    .doc-conteudo-leitura.is-html img { max-width: 100%; height: auto; border-radius: 4px; display: block; margin: 10px 0; }
+    /* Imagem centralizada quando é mais estreita que a área de texto (uma
+       foto/figura pequena no meio do Word não deve ficar colada na
+       esquerda); se ocupa a largura toda, centralizar não faz diferença
+       visual nenhuma. */
+    .doc-conteudo-leitura.is-html img { max-width: 100%; height: auto; border-radius: 4px; display: block; margin: 10px auto; }
     /* Preto e em negrito, igual ao padrão dos títulos numerados do Word
        (1 OBJETIVO, 7 PAPÉIS..., 7.1 Estrutura organizacional...) — sem
        cor, pra não ficar um título azul do nada e outro preto ao lado só
@@ -163,10 +177,38 @@
     .doc-conteudo-leitura.is-html h2 { font-size: 13.5px; font-weight: 700; color: #000; margin: 14px 0 7px; }
     .doc-conteudo-leitura.is-html h3 { font-size: 13.5px; font-weight: 700; color: #000; margin: 12px 0 6px; }
     /* Tabelas importadas do Word — o mammoth só traz o texto de cada célula,
-       sem bordas; aqui a gente desenha as bordas pra ficar igual ao Word. */
-    .doc-conteudo-leitura.is-html table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 12.5px; }
+       sem bordas; aqui a gente desenha as bordas pra ficar igual ao Word.
+       "width:auto" + "margin:auto" centraliza tabelas mais estreitas que a
+       área de texto (ex: uma tabelinha de 3 colunas) em vez de forçar
+       largura 100% sempre; uma tabela que já precisa da largura toda
+       continua ocupando ela (max-width cuida disso). */
+    .doc-conteudo-leitura.is-html table { border-collapse: collapse; width: auto; max-width: 100%; margin: 10px auto; font-size: 12.5px; }
     .doc-conteudo-leitura.is-html table td, .doc-conteudo-leitura.is-html table th { border: 1px solid #ccc; padding: 6px 8px; vertical-align: top; }
-    .doc-conteudo-leitura.is-html table th { background: #eef2ff; font-weight: 700; }
+    .doc-conteudo-leitura.is-html table th { background: #eef2ff; font-weight: 700; text-align: center; }
+    /* Marcador de quebra de página original do Word (ver
+       prepararDocxComMarcadoresDePagina) — na tela é só uma linha
+       discreta pra mostrar onde terminava cada página do documento
+       original; no PDF (exportarPdf) é tratado como corte obrigatório
+       e escondido via ".doc-pdf-captura" mais abaixo, pra não aparecer
+       no documento oficial. */
+    .doc-conteudo-leitura.is-html .doc-pagebreak {
+      height: 0; margin: 22px 0; border-top: 1px dashed #c7c7c7; position: relative;
+    }
+    .doc-conteudo-leitura.is-html .doc-pagebreak::after {
+      content: 'fim da página ' counter(doc-pg) ' do original';
+      counter-increment: doc-pg;
+      position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
+      background: #fff; padding: 0 8px; font-size: 10px; color: #aaa; white-space: nowrap;
+    }
+    .doc-conteudo-leitura.is-html { counter-reset: doc-pg; }
+    /* No PDF (exportarPdf monta o conteúdo dentro de um container com essa
+       classe) o marcador não deve aparecer — é só um aviso pra quem está
+       lendo na tela; a quebra em si acontece de verdade entre as páginas
+       do PDF, não precisa de linha pontilhada nem legenda num documento
+       oficial impresso. Zero espaço também, pra não "empurrar" o conteúdo
+       e bagunçar a posição medida logo antes do html2canvas. */
+    .doc-pdf-captura .doc-conteudo-leitura.is-html .doc-pagebreak { margin: 0; border-top: none; }
+    .doc-pdf-captura .doc-conteudo-leitura.is-html .doc-pagebreak::after { content: none; }
 
     /* Leitura em tela cheia */
     .drawer-panel.tela-cheia { width: 100vw; max-width: 100vw; }
@@ -491,6 +533,95 @@
       return CATEGORIA_POR_PREFIXO[prefixo] || '';
     }
 
+    // O mammoth.js (biblioteca que lê o .docx) IGNORA de propósito as quebras
+    // de página manuais do Word (Ctrl+Enter) e o "iniciar nova página" de
+    // estilos de título — ele não tem nenhuma opção pra preservar isso, o
+    // conteúdo sai todo corrido como se a quebra nunca tivesse existido.
+    // Pra contornar isso sem reescrever o mammoth: abrimos o .docx (que é só
+    // um .zip) com o JSZip, achamos essas quebras no XML original e, no
+    // lugar de cada uma, inserimos um parágrafo novo só com um texto-sentinela
+    // bem improvável de aparecer de verdade num documento. O mammoth converte
+    // esse parágrafo normalmente — vira um <p>SENTINELA</p> no HTML — e depois
+    // a gente troca esse <p> por um marcador de quebra de página de verdade
+    // (renderizarPaginacaoDoWord). Qualquer erro nesse processo (docx
+    // corrompido, estrutura inesperada) cai no catch e devolve o arquivo
+    // ORIGINAL sem alteração — a importação continua funcionando, só sem
+    // preservar a paginação (melhor que travar a importação toda).
+    const SENTINELA_QUEBRA_PAGINA = 'CLAUDE_QUEBRA_DE_PAGINA';
+
+    async function prepararDocxComMarcadoresDePagina(arrayBuffer) {
+      try {
+        if (!window.JSZip) return arrayBuffer;
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        const caminhoDoc = 'word/document.xml';
+        const arquivoDoc = zip.file(caminhoDoc);
+        if (!arquivoDoc) return arrayBuffer;
+
+        let xml = await arquivoDoc.async('string');
+        const paragrafoSentinela = `<w:p><w:r><w:t xml:space="preserve">${SENTINELA_QUEBRA_PAGINA}</w:t></w:r></w:p>`;
+
+        // "(?:(?!<\/w:p>)[\s\S])*?" é igual a "[\s\S]*?" (qualquer coisa,
+        // sem pressa), só que proibido de "engolir" um "</w:p>" no meio do
+        // caminho. Sem essa proibição, como <w:p> aparece várias vezes no
+        // documento inteiro, o motor de regex casava a partir do PRIMEIRO
+        // <w:p> do arquivo (lá no começo) e ia "comendo" todos os
+        // parágrafos/títulos até achar a quebra, não só o parágrafo dela —
+        // a sentinela saía no lugar errado (via de regra, no começo do
+        // documento). Com essa proibição, uma tentativa de casar que
+        // chegaria a cruzar o fim de um parágrafo sem achar a quebra
+        // simplesmente falha, e o motor tenta de novo a partir do <w:p>
+        // seguinte — só "ganha" o parágrafo que realmente contém a quebra.
+        const SEM_CRUZAR_FIM_DE_PARAGRAFO = '(?:(?!<\\/w:p>)[\\s\\S])*?';
+
+        // Caso 1: quebra manual de página (<w:br w:type="page"/>) — o ponto
+        // de quebra é logo ali; aproximamos inserindo a sentinela depois do
+        // fim do PARÁGRAFO que contém a quebra (o caso comum: ela é a última
+        // coisa do parágrafo, ou está num parágrafo vazio só pra isso).
+        xml = xml.replace(
+          new RegExp('<w:p\\b[^>]*>' + SEM_CRUZAR_FIM_DE_PARAGRAFO + '<w:br\\b[^>]*w:type="page"[^>]*\\/>' + SEM_CRUZAR_FIM_DE_PARAGRAFO + '<\\/w:p>', 'g'),
+          (trechoCompleto) => trechoCompleto + paragrafoSentinela
+        );
+
+        // Caso 2: propriedade de parágrafo "iniciar em nova página"
+        // (<w:pageBreakBefore/>) — aqui a quebra acontece ANTES do parágrafo,
+        // então a sentinela entra antes dele.
+        xml = xml.replace(
+          new RegExp('<w:p\\b[^>]*>' + SEM_CRUZAR_FIM_DE_PARAGRAFO + '<w:pageBreakBefore\\b[^>]*\\/>' + SEM_CRUZAR_FIM_DE_PARAGRAFO + '<\\/w:p>', 'g'),
+          (trechoCompleto) => paragrafoSentinela + trechoCompleto
+        );
+
+        zip.file(caminhoDoc, xml);
+        return await zip.generateAsync({ type: 'arraybuffer' });
+      } catch (err) {
+        console.error('Não consegui preparar marcadores de página (seguindo sem eles):', err);
+        return arrayBuffer;
+      }
+    }
+
+    // Depois que o mammoth converte o .docx (já com as sentinelas) pra HTML,
+    // cada sentinela aparece como um <p>SENTINELA</p> isolado (porque sempre
+    // a inserimos como parágrafo próprio, nunca dentro de outro). Troca cada
+    // um desses parágrafos por um <div class="doc-pagebreak"> de verdade.
+    function substituirSentinelasPorQuebraDePagina(html) {
+      if (!html || html.indexOf(SENTINELA_QUEBRA_PAGINA) === -1) return html;
+      try {
+        const doc = new DOMParser().parseFromString(`<div id="raiz-tmp">${html}</div>`, 'text/html');
+        const raiz = doc.getElementById('raiz-tmp');
+        if (!raiz) return html;
+        raiz.querySelectorAll('p').forEach(p => {
+          if ((p.textContent || '').trim() === SENTINELA_QUEBRA_PAGINA.trim()) {
+            const marcador = doc.createElement('div');
+            marcador.className = 'doc-pagebreak';
+            p.replaceWith(marcador);
+          }
+        });
+        return raiz.innerHTML;
+      } catch (err) {
+        console.error('Não consegui converter os marcadores de página (seguindo sem eles):', err);
+        return html.split(SENTINELA_QUEBRA_PAGINA).join('');
+      }
+    }
+
     async function processarImportacao(arquivos) {
       const area = document.getElementById('doc-importacao-area');
       area.innerHTML = `<div class="qc-card"><div class="doc-import-progresso" id="doc-import-progresso">Lendo arquivos...</div></div>`;
@@ -513,14 +644,18 @@
         let texto = '';
         try {
           const buf = await arquivo.arrayBuffer();
+          // Primeiro marca onde o Word original quebrava de página (ver
+          // prepararDocxComMarcadoresDePagina) — se der qualquer problema,
+          // essa função devolve o arquivo original sem marcar nada.
+          const bufComMarcadores = await prepararDocxComMarcadoresDePagina(buf);
           // convertToHtml (em vez de extractRawText) preserva negrito, itálico,
           // títulos, listas e já embute as imagens do Word como base64 — tudo
           // isso continua sendo lido 100% no navegador, nada sai daqui.
           // Cor de fonte do Word não é trazida: é uma limitação conhecida do
           // mammoth.js (ele ignora formatação "visual" de propósito). Dá pra
           // pintar o texto depois, direto no editor do sistema.
-          const resultado = await mammoth.convertToHtml({ arrayBuffer: buf });
-          texto = sanitizarHtml(resultado.value || '');
+          const resultado = await mammoth.convertToHtml({ arrayBuffer: bufComMarcadores });
+          texto = sanitizarHtml(substituirSentinelasPorQuebraDePagina(resultado.value || ''));
         } catch (err) {
           console.error('Erro ao ler', arquivo.name, err);
           ignorados.push(`${arquivo.name} (não consegui ler o conteúdo)`);
@@ -839,6 +974,7 @@
       container.style.background = '#fff';
       container.style.boxSizing = 'border-box';
       container.style.fontFamily = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+      container.classList.add('doc-pdf-captura');
       container.innerHTML = `
         ${renderCabecalhoOficial(d)}
         <div class="doc-conteudo-leitura${ehHtml ? ' is-html' : ''}" style="border:none; border-radius:0; padding:0;">
@@ -858,6 +994,20 @@
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
         const escala = 2; // nitidez de impressão sem deixar o arquivo gigante
+
+        // Mede a posição de cada "fim de página do Word original" (ver
+        // substituirSentinelasPorQuebraDePagina) ENQUANTO o conteúdo ainda
+        // está no layout normal, antes de "fotografar" — depois disso virar
+        // um canvas plano não tem mais como achar essas posições. ".doc-pdf-captura"
+        // já deixa o marcador com altura zero, então essa medição já é
+        // exatamente a posição que o html2canvas vai capturar (nenhum reflow
+        // entre medir e fotografar).
+        const containerRect = container.getBoundingClientRect();
+        const quebrasForcadasPx = Array.from(container.querySelectorAll('.doc-pagebreak'))
+          .map(el => Math.round((el.getBoundingClientRect().top - containerRect.top) * escala))
+          .filter(px => px > 0)
+          .sort((a, b) => a - b);
+
         const canvas = await html2canvas(container, {
           scale: escala,
           useCORS: true,
@@ -906,7 +1056,20 @@
         while (cursorPx < canvas.height) {
           const fimIdealPx = Math.min(cursorPx + alturaUtilPaginaPx, canvas.height);
           let fimPx = fimIdealPx;
-          if (fimIdealPx < canvas.height) {
+
+          // Quebra de página do Word original tem prioridade sobre o corte
+          // "ideal" — se o documento de origem terminava a página ali, o
+          // PDF também termina ali, mesmo que sobrasse espaço em branco
+          // nesta página (é exatamente o "guardar a mesma página" pedido).
+          // Só não respeita se a quebra estiver DEPOIS do fim ideal — nesse
+          // caso essa página do Word é mais alta do que cabe numa página do
+          // PDF (fonte/margem diferente) e precisa ser dividida mesmo, pela
+          // busca de linha em branco abaixo.
+          const quebraForcada = quebrasForcadasPx.find(px => px > cursorPx && px <= fimIdealPx);
+
+          if (quebraForcada !== undefined) {
+            fimPx = quebraForcada;
+          } else if (fimIdealPx < canvas.height) {
             // só aceita um corte "em branco" se ele ainda deixar pelo menos
             // 55% da página preenchido — senão a página anterior sai curta
             // demais e o conteúdo "sobra" todo pra depois.
@@ -917,7 +1080,11 @@
           }
 
           const alturaFatiaPx = fimPx - cursorPx;
-          if (alturaFatiaPx <= 0) break;
+          // Defensivo: na prática fimPx > cursorPx sempre (quebra forçada só
+          // entra quando > cursorPx, e a busca por linha em branco também
+          // nunca volta pra trás) — mas se algum caso bizarro zerar a fatia,
+          // avança pelo menos 1px em vez de travar o laço num loop infinito.
+          if (alturaFatiaPx <= 0) { cursorPx = Math.max(fimPx, cursorPx + 1); continue; }
 
           if (cursorPx > 0) pdf.addPage();
 
