@@ -12,7 +12,7 @@
    o cache antigo de todo mundo automaticamente.
    ========================================================================= */
 
-const CACHE_VERSION = 'cq-shell-v1';
+const CACHE_VERSION = 'cq-shell-v2';
 
 const ARQUIVOS_SHELL = [
   './index.html',
